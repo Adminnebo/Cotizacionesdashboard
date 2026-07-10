@@ -4,8 +4,15 @@
   const cssvar = n => getComputedStyle(document.body).getPropertyValue(n).trim();
   const colors = () => ({ received: cssvar('--received'), sent: cssvar('--sent') });
   let current = null, days = 30;
+  let msgDir = 'all', msgPage = 1, msgData = null;
 
   const fmtNum = n => (Number(n) || 0).toLocaleString('es-MX');
+  const escapeHtml = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  function fmtCost(v, ccy) {
+    if (!v) return '—';
+    const dec = v < 1 ? 4 : 2;
+    return (ccy || 'USD') + ' ' + Number(v).toLocaleString('es-MX', { minimumFractionDigits: dec, maximumFractionDigits: dec });
+  }
   function fmtSecs(s) {
     if (s == null) return '—';
     if (s < 90) return Math.round(s) + ' s';
@@ -74,6 +81,58 @@
       : '<p class="card__note">Sin mensajes enviados en el rango.</p>';
   }
 
+  function dirBadge(d) {
+    const col = colors();
+    return d === 'out'
+      ? `<span class="pill"><i style="background:${col.sent}"></i>Saliente</span>`
+      : `<span class="pill"><i style="background:${col.received}"></i>Entrante</span>`;
+  }
+
+  function renderMessages() {
+    const d = msgData; if (!d) return;
+    const body = $('#msgsBody');
+    if (!d.items.length) {
+      body.innerHTML = `<tr><td colspan="7" class="msgs__empty">Sin mensajes en el rango.</td></tr>`;
+    } else {
+      body.innerHTML = d.items.map(m => `<tr>
+        <td class="nowrap">${fmtDateTime(m.createdAt)}</td>
+        <td>${dirBadge(m.direction)}</td>
+        <td class="cap">${escapeHtml(m.type)}</td>
+        <td class="msgs__text">${m.text ? escapeHtml(m.text) : '<span class="dim">—</span>'}</td>
+        <td class="num">${m.responseSecs != null ? fmtSecs(m.responseSecs) : '<span class="dim">—</span>'}</td>
+        <td class="num">${fmtCost(m.cost, d.cost.currency)}</td>
+        <td class="cap dim">${escapeHtml(m.status || '—')}</td>
+      </tr>`).join('');
+    }
+    // paginador
+    const pages = Math.max(1, Math.ceil(d.total / d.limit));
+    const first = d.total ? (d.page - 1) * d.limit + 1 : 0;
+    const last = Math.min(d.page * d.limit, d.total);
+    $('#msgsPager').innerHTML = `
+      <span>${fmtNum(first)}–${fmtNum(last)} de ${fmtNum(d.total)}</span>
+      <div class="pager__btns">
+        <button class="pgbtn" data-pg="prev" ${d.page <= 1 ? 'disabled' : ''}>← Anterior</button>
+        <span class="pager__n">Pág. ${d.page} / ${pages}</span>
+        <button class="pgbtn" data-pg="next" ${d.page >= pages ? 'disabled' : ''}>Siguiente →</button>
+      </div>`;
+    const rateNote = (d.cost.out || d.cost.in)
+      ? `Coste a tarifa configurada (saliente ${fmtCost(d.cost.out, d.cost.currency)}${d.cost.in ? `, entrante ${fmtCost(d.cost.in, d.cost.currency)}` : ''}).`
+      : 'Coste sin tarifa configurada (MSG_COST_OUT). Configúrala en las variables de entorno para ver importes.';
+    $('#msgsNote').textContent = rateNote + ' Tiempo de respuesta = diferencia con el mensaje entrante anterior en la misma conversación.';
+  }
+
+  async function loadMessages() {
+    try {
+      const params = new URLSearchParams({ days: String(days), page: String(msgPage), limit: '50' });
+      if (msgDir !== 'all') params.set('dir', msgDir);
+      const res = await fetch('/api/messages?' + params.toString());
+      msgData = await res.json();
+      renderMessages();
+    } catch (e) {
+      $('#msgsBody').innerHTML = `<tr><td colspan="7" class="msgs__empty">Error: ${escapeHtml(e.message)}</td></tr>`;
+    }
+  }
+
   async function load() {
     try {
       const res = await fetch('/api/stats?days=' + days);
@@ -92,15 +151,30 @@
       $('#rangeSeg').querySelectorAll('.seg').forEach(x => x.classList.remove('seg--active'));
       b.classList.add('seg--active');
       days = b.dataset.days === 'all' ? 'all' : Number(b.dataset.days);
-      load();
+      msgPage = 1;
+      load(); loadMessages();
     });
-    $('#btnRefresh').addEventListener('click', load);
+    $('#dirSeg').addEventListener('click', e => {
+      const b = e.target.closest('.seg'); if (!b) return;
+      $('#dirSeg').querySelectorAll('.seg').forEach(x => x.classList.remove('seg--active'));
+      b.classList.add('seg--active');
+      msgDir = b.dataset.dir; msgPage = 1;
+      loadMessages();
+    });
+    $('#msgsPager').addEventListener('click', e => {
+      const b = e.target.closest('.pgbtn'); if (!b || b.disabled) return;
+      msgPage += b.dataset.pg === 'next' ? 1 : -1;
+      if (msgPage < 1) msgPage = 1;
+      loadMessages();
+    });
+    $('#btnRefresh').addEventListener('click', () => { load(); loadMessages(); });
     $('#btnTheme').addEventListener('click', () => {
       applyTheme(document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
       render(); // re-pinta con los colores del tema
+      renderMessages();
     });
-    load();
-    setInterval(load, 60000); // refresco cada minuto
+    load(); loadMessages();
+    setInterval(() => { load(); loadMessages(); }, 60000); // refresco cada minuto
   }
   document.addEventListener('DOMContentLoaded', init);
 })();

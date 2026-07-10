@@ -59,6 +59,36 @@
         <div id="chartType" class="typebars"></div>
       </section>
     </div>
+
+    <!-- Mensajes detallados -->
+    <section class="card card--wide" id="msgsCard">
+      <div class="card__head">
+        <h2>Mensajes detallados</h2>
+        <div class="segmented" id="dirSeg" role="tablist" aria-label="Dirección">
+          <button class="seg seg--active" data-dir="all">Todos</button>
+          <button class="seg" data-dir="in">Entrantes</button>
+          <button class="seg" data-dir="out">Salientes</button>
+        </div>
+      </div>
+      <div class="tablewrap">
+        <table class="msgs" id="msgsTable">
+          <thead>
+            <tr>
+              <th>Fecha</th>
+              <th>Dirección</th>
+              <th>Tipo</th>
+              <th>Mensaje</th>
+              <th class="num">Tiempo resp.</th>
+              <th class="num">Coste</th>
+              <th>Estado</th>
+            </tr>
+          </thead>
+          <tbody id="msgsBody"></tbody>
+        </table>
+      </div>
+      <div class="pager" id="msgsPager"></div>
+      <p class="card__note" id="msgsNote"></p>
+    </section>
   </main>
 
   <div id="tip" class="tip" hidden></div>
