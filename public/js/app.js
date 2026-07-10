@@ -48,7 +48,7 @@
       kpi('Tiempo de respuesta', '', fmtSecs(rt.medianSecs), `mediana · prom ${fmtSecs(rt.avgSecs)} · p90 ${fmtSecs(rt.p90Secs)}`),
       kpi('Último enviado', '', fmtDateTime(s.kpi.lastSentAt), relTime(s.kpi.lastSentAt)),
       kpi('Conversaciones', '', fmtNum(s.kpi.activeConversations), 'con actividad en el rango'),
-      kpi('Cotizaciones', '', q.available ? fmtNum(q.count) : 'Pendiente', q.available ? 'enviadas' : 'configurar QUOTES_SQL', !q.available)
+      kpi('Cotizaciones', '', q.available ? fmtNum(q.count) : 'Pendiente', q.available ? (q.amount ? 'RD$ ' + fmtNum(Math.round(q.amount)) + ' cotizado' : 'enviadas en el rango') : 'configurar MSSQL', !q.available)
     ].join('');
 
     // Legends

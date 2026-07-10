@@ -6,6 +6,7 @@
 'use strict';
 const path = require('path');
 const express = require('express');
+const sql = require('mssql');
 const { q } = require('./db');
 
 const app = express();
@@ -14,23 +15,53 @@ const TZ = process.env.TZ_DISPLAY || 'America/Santo_Domingo';
 
 const wrap = fn => (req, res) => Promise.resolve(fn(req, res)).catch(e => { console.error(req.path, e.message); res.status(500).json({ error: e.message }); });
 
-// Cotizaciones: configurable vía QUOTES_SQL (debe devolver una columna con el conteo; usa $1 = fecha desde).
-async function quotesStat(from) {
-  const sql = process.env.QUOTES_SQL;
-  if (!sql) return { available: false };
+// Cotizaciones: viven en una base MSSQL aparte (site4now). Conexión por env MSSQL_*.
+// Cuenta las filas de la tabla de cotizaciones en el rango de fechas.
+let mssqlPool = null;
+async function getMssql() {
+  if (!process.env.MSSQL_SERVER) return null;
+  if (mssqlPool && mssqlPool.connected) return mssqlPool;
   try {
-    const r = await q(sql, [from]);
-    const row = r.rows[0] || {};
-    const n = Number(row.count != null ? row.count : (row.n != null ? row.n : Object.values(row)[0])) || 0;
-    return { available: true, count: n };
-  } catch (e) { return { available: false, error: e.message }; }
+    const pool = new sql.ConnectionPool({
+      server: process.env.MSSQL_SERVER,
+      database: process.env.MSSQL_DATABASE,
+      user: process.env.MSSQL_USER,
+      password: process.env.MSSQL_PASSWORD,
+      port: Number(process.env.MSSQL_PORT || 1433),
+      options: { encrypt: process.env.MSSQL_ENCRYPT === 'true', trustServerCertificate: true },
+      pool: { max: 4, idleTimeoutMillis: 30000 },
+      connectionTimeout: 15000, requestTimeout: 15000
+    });
+    mssqlPool = await pool.connect();
+    mssqlPool.on('error', () => { mssqlPool = null; });
+    return mssqlPool;
+  } catch (e) { mssqlPool = null; throw e; }
+}
+async function quotesStat(from) {
+  if (!process.env.MSSQL_SERVER) return { available: false };
+  const table = process.env.MSSQL_QUOTES_TABLE || 'iCotizacionesWebIA';
+  const dateCol = process.env.MSSQL_QUOTES_DATE || 'FechaRegistro';
+  const amountCol = process.env.MSSQL_QUOTES_AMOUNT || 'total';
+  try {
+    const pool = await getMssql();
+    const r = await pool.request().input('from', sql.DateTime, new Date(from))
+      .query(`SELECT COUNT(*) AS n, COALESCE(SUM([${amountCol}]),0) AS monto FROM [${table}] WHERE [${dateCol}] >= @from`);
+    const row = r.recordset[0] || {};
+    return { available: true, count: Number(row.n) || 0, amount: Number(row.monto) || 0 };
+  } catch (e) {
+    mssqlPool = null;
+    return { available: false, error: e.message };
+  }
 }
 
 app.get('/api/health', (_req, res) => res.json({ ok: true }));
 
 app.get('/api/stats', wrap(async (req, res) => {
   const days = req.query.days === 'all' ? 100000 : (Number(req.query.days) || 30);
-  const from = new Date(Date.now() - days * 86400000).toISOString();
+  let fromMs = Date.now() - days * 86400000;
+  const minMs = Date.parse('2000-01-01T00:00:00Z'); // MSSQL DateTime no admite < 1753
+  if (fromMs < minMs) fromMs = minMs;
+  const from = new Date(fromMs).toISOString();
 
   const [kpi, rt, byDay, byHour, byType, quotes] = await Promise.all([
     q(`SELECT count(*) FILTER (WHERE direction='out') AS sent,
