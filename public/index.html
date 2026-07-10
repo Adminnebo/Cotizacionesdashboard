@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Analítica · WhatsApp</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body class="viz-root">
+  <header class="top">
+    <div class="top__title">
+      <div class="top__logo">📊</div>
+      <div>
+        <h1>Analítica · WhatsApp</h1>
+        <p id="rangeLabel" class="top__sub">—</p>
+      </div>
+    </div>
+    <div class="top__actions">
+      <div class="segmented" id="rangeSeg" role="tablist" aria-label="Rango">
+        <button class="seg" data-days="7">7 días</button>
+        <button class="seg seg--active" data-days="30">30 días</button>
+        <button class="seg" data-days="90">90 días</button>
+        <button class="seg" data-days="all">Todo</button>
+      </div>
+      <button class="icon-btn" id="btnRefresh" title="Actualizar">↻</button>
+      <button class="icon-btn" id="btnTheme" title="Tema claro/oscuro">◐</button>
+    </div>
+  </header>
+
+  <main class="wrap" id="main">
+    <!-- KPIs -->
+    <section class="kpis" id="kpis"></section>
+
+    <!-- Gráfico: mensajes por día -->
+    <section class="card card--wide">
+      <div class="card__head">
+        <h2>Mensajes por día</h2>
+        <div class="legend" id="legendDay"></div>
+      </div>
+      <div id="chartDay" class="chart"></div>
+    </section>
+
+    <div class="grid2">
+      <!-- Horas pico -->
+      <section class="card">
+        <div class="card__head">
+          <h2>Horas pico</h2>
+          <div class="legend" id="legendHour"></div>
+        </div>
+        <div id="chartHour" class="chart"></div>
+        <p class="card__note" id="hourNote"></p>
+      </section>
+
+      <!-- Tipos de mensaje enviado -->
+      <section class="card">
+        <div class="card__head"><h2>Tipos enviados</h2></div>
+        <div id="chartType" class="typebars"></div>
+      </section>
+    </div>
+  </main>
+
+  <div id="tip" class="tip" hidden></div>
+  <script src="js/charts.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
