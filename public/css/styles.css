@@ -90,6 +90,14 @@ body { font-family: Inter, system-ui, sans-serif; background: var(--surface-0); 
 .tbar__fill { height: 100%; border-radius: 6px; background: var(--sent); }
 .tbar__val { text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; }
 
+/* ===== Pestañas ===== */
+.tabs { display: flex; gap: 4px; max-width: 1560px; margin: 0 auto; width: 100%; padding: 18px clamp(20px, 3vw, 48px) 0; border-bottom: 1px solid var(--border); }
+.tab { padding: 11px 20px; font-size: 14.5px; font-weight: 600; color: var(--text-secondary); background: none; border: none; border-bottom: 2px solid transparent; margin-bottom: -1px; cursor: pointer; border-radius: 8px 8px 0 0; }
+.tab:hover { color: var(--text-primary); background: var(--surface-1); }
+.tab--active { color: var(--text-primary); border-bottom-color: var(--sent); }
+.tabpanel { display: flex; flex-direction: column; gap: 26px; }
+.tabpanel[hidden] { display: none; }
+
 /* ===== Tabla de mensajes detallados ===== */
 .tablewrap { overflow-x: auto; margin: 0 -4px; }
 table.msgs { width: 100%; border-collapse: collapse; font-size: 13.5px; }
@@ -103,6 +111,14 @@ table.msgs { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 .msgs tbody tr:hover td { background: var(--surface-0); }
 .msgs__text { max-width: 520px; color: var(--text-secondary); line-height: 1.45; }
 .msgs__empty { text-align: center; color: var(--text-muted); padding: 28px 14px; }
+
+/* vista emparejada: entrante (cliente) + respuesta (bot) en la misma fila */
+.msgs--pairs th:nth-child(2), .msgs--pairs th:nth-child(3),
+.msgs--pairs td.msgs__in, .msgs--pairs td.msgs__out { width: 34%; }
+.msgs--pairs td.msgs__in { border-left: 3px solid var(--received); }
+.msgs--pairs td.msgs__out { border-left: 3px solid var(--sent); }
+.msgs--pairs td.msgs__in .msgs__text { color: var(--text-primary); }
+.msgs--pairs .msgs__text { max-width: 420px; display: block; }
 
 .pill { display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px; font-weight: 600; color: var(--text-primary); white-space: nowrap; }
 .pill i { width: 8px; height: 8px; border-radius: 50%; flex: none; }

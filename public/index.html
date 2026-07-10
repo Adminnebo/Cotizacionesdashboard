@@ -29,66 +29,66 @@
     </div>
   </header>
 
+  <nav class="tabs" id="tabs" role="tablist" aria-label="Vistas">
+    <button class="tab tab--active" data-tab="resumen" role="tab">📈 Resumen</button>
+    <button class="tab" data-tab="mensajes" role="tab">💬 Mensajes</button>
+  </nav>
+
   <main class="wrap" id="main">
-    <!-- KPIs -->
-    <section class="kpis" id="kpis"></section>
+    <!-- Pestaña: Resumen (KPIs + gráficas) -->
+    <div class="tabpanel" id="tabResumen">
+      <section class="kpis" id="kpis"></section>
 
-    <!-- Gráfico: mensajes por día -->
-    <section class="card card--wide">
-      <div class="card__head">
-        <h2>Mensajes por día</h2>
-        <div class="legend" id="legendDay"></div>
-      </div>
-      <div id="chartDay" class="chart"></div>
-    </section>
-
-    <div class="grid2">
-      <!-- Horas pico -->
-      <section class="card">
+      <section class="card card--wide">
         <div class="card__head">
-          <h2>Horas pico</h2>
-          <div class="legend" id="legendHour"></div>
+          <h2>Mensajes por día</h2>
+          <div class="legend" id="legendDay"></div>
         </div>
-        <div id="chartHour" class="chart"></div>
-        <p class="card__note" id="hourNote"></p>
+        <div id="chartDay" class="chart"></div>
       </section>
 
-      <!-- Tipos de mensaje enviado -->
-      <section class="card">
-        <div class="card__head"><h2>Tipos enviados</h2></div>
-        <div id="chartType" class="typebars"></div>
-      </section>
+      <div class="grid2">
+        <section class="card">
+          <div class="card__head">
+            <h2>Horas pico</h2>
+            <div class="legend" id="legendHour"></div>
+          </div>
+          <div id="chartHour" class="chart"></div>
+          <p class="card__note" id="hourNote"></p>
+        </section>
+
+        <section class="card">
+          <div class="card__head"><h2>Tipos enviados</h2></div>
+          <div id="chartType" class="typebars"></div>
+        </section>
+      </div>
     </div>
 
-    <!-- Mensajes detallados -->
-    <section class="card card--wide" id="msgsCard">
-      <div class="card__head">
-        <h2>Mensajes detallados</h2>
-        <div class="segmented" id="dirSeg" role="tablist" aria-label="Dirección">
-          <button class="seg seg--active" data-dir="all">Todos</button>
-          <button class="seg" data-dir="in">Entrantes</button>
-          <button class="seg" data-dir="out">Salientes</button>
+    <!-- Pestaña: Mensajes (entrante + respuesta en la misma fila) -->
+    <div class="tabpanel" id="tabMensajes" hidden>
+      <section class="card card--wide" id="msgsCard">
+        <div class="card__head">
+          <h2>Mensajes — entrante y respuesta</h2>
         </div>
-      </div>
-      <div class="tablewrap">
-        <table class="msgs" id="msgsTable">
-          <thead>
-            <tr>
-              <th>Fecha</th>
-              <th>Dirección</th>
-              <th>Tipo</th>
-              <th>Mensaje</th>
-              <th class="num">Tiempo resp.</th>
-              <th class="num">Coste</th>
-              <th>Estado</th>
-            </tr>
-          </thead>
-          <tbody id="msgsBody"></tbody>
-        </table>
-      </div>
-      <div class="pager" id="msgsPager"></div>
-      <p class="card__note" id="msgsNote"></p>
-    </section>
+        <div class="tablewrap">
+          <table class="msgs msgs--pairs" id="msgsTable">
+            <thead>
+              <tr>
+                <th>Fecha</th>
+                <th>Entrante (cliente)</th>
+                <th>Respuesta (bot)</th>
+                <th class="num">Tiempo resp.</th>
+                <th class="num">Coste</th>
+                <th>Estado</th>
+              </tr>
+            </thead>
+            <tbody id="msgsBody"></tbody>
+          </table>
+        </div>
+        <div class="pager" id="msgsPager"></div>
+        <p class="card__note" id="msgsNote"></p>
+      </section>
+    </div>
   </main>
 
   <div id="tip" class="tip" hidden></div>

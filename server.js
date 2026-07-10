@@ -125,9 +125,10 @@ app.get('/api/stats', wrap(async (req, res) => {
   });
 }));
 
-// Mensajes detallados: entrante/saliente, coste y tiempo de respuesta por mensaje.
-// El tiempo de respuesta de un saliente = diferencia con el entrante inmediatamente
-// anterior en la misma conversación (null si no responde a un entrante).
+// Mensajes emparejados: cada mensaje entrante junto a su respuesta saliente,
+// con el tiempo que tardó la respuesta y el coste del saliente. Un par = un
+// saliente cuyo mensaje inmediatamente anterior en la conversación fue entrante.
+const trunc = (t, n) => (t && t.length > n ? t.slice(0, n) + '…' : (t || ''));
 app.get('/api/messages', wrap(async (req, res) => {
   const days = req.query.days === 'all' ? 100000 : (Number(req.query.days) || 30);
   let fromMs = Date.now() - days * 86400000;
@@ -135,46 +136,50 @@ app.get('/api/messages', wrap(async (req, res) => {
   if (fromMs < minMs) fromMs = minMs;
   const from = new Date(fromMs).toISOString();
 
-  const dir = ['in', 'out'].includes(req.query.dir) ? req.query.dir : null;
   const limit = Math.min(200, Math.max(10, Number(req.query.limit) || 50));
   const page = Math.max(1, Number(req.query.page) || 1);
   const offset = (page - 1) * limit;
-
-  const params = [from];
-  let dirFilter = '';
-  if (dir) { params.push(dir); dirFilter = `WHERE direction = $${params.length}`; }
 
   const [rows, totalR] = await Promise.all([
     q(`WITH seq AS (
          SELECT id, conversation_id, direction, type, text, status, created_at,
                 LAG(direction)  OVER w AS prev_dir,
+                LAG(text)       OVER w AS prev_text,
+                LAG(type)       OVER w AS prev_type,
                 LAG(created_at) OVER w AS prev_at
          FROM messages WHERE created_at >= $1
          WINDOW w AS (PARTITION BY conversation_id ORDER BY created_at, id))
-       SELECT id, conversation_id, direction, type, text, status, created_at,
-              CASE WHEN direction='out' AND prev_dir='in'
-                   THEN EXTRACT(EPOCH FROM (created_at - prev_at)) END AS response_secs
-       FROM seq ${dirFilter}
+       SELECT id, conversation_id, created_at AS out_at, status,
+              text AS out_text, type AS out_type,
+              prev_text AS in_text, prev_type AS in_type, prev_at AS in_at,
+              EXTRACT(EPOCH FROM (created_at - prev_at)) AS response_secs
+       FROM seq
+       WHERE direction='out' AND prev_dir='in'
        ORDER BY created_at DESC, id DESC
-       LIMIT ${limit} OFFSET ${offset}`, params),
-    q(`SELECT count(*)::int AS n FROM messages
-       WHERE created_at >= $1 ${dir ? 'AND direction = $2' : ''}`, dir ? [from, dir] : [from])
+       LIMIT ${limit} OFFSET ${offset}`, [from]),
+    q(`WITH seq AS (
+         SELECT direction, LAG(direction) OVER w AS prev_dir
+         FROM messages WHERE created_at >= $1
+         WINDOW w AS (PARTITION BY conversation_id ORDER BY created_at, id))
+       SELECT count(*)::int AS n FROM seq WHERE direction='out' AND prev_dir='in'`, [from])
   ]);
 
   const total = totalR.rows[0] ? totalR.rows[0].n : 0;
   res.json({
-    page, limit, total, dir: dir || 'all',
+    page, limit, total,
     cost: { out: MSG_COST_OUT, in: MSG_COST_IN, currency: COST_CCY },
     items: rows.rows.map(m => ({
       id: String(m.id),
       conversationId: String(m.conversation_id),
-      direction: m.direction,
-      type: m.type || 'text',
-      text: m.text || '',
+      inText: trunc(m.in_text, 240),
+      inType: m.in_type || 'text',
+      inAt: m.in_at,
+      outText: trunc(m.out_text, 240),
+      outType: m.out_type || 'text',
+      outAt: m.out_at,
       status: m.status || '',
-      createdAt: m.created_at,
       responseSecs: m.response_secs != null ? Number(m.response_secs) : null,
-      cost: m.direction === 'out' ? MSG_COST_OUT : MSG_COST_IN
+      cost: MSG_COST_OUT
     }))
   });
 }));
