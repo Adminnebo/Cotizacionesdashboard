@@ -7,10 +7,9 @@
 const path = require('path');
 const express = require('express');
 const sql = require('mssql');
-const { q, pool } = require('./db');
+const { q } = require('./db');
 
 const app = express();
-app.use(express.json({ limit: '12mb' }));
 const PORT = process.env.PORT || 8080;
 const TZ = process.env.TZ_DISPLAY || 'America/Santo_Domingo';
 
@@ -184,118 +183,6 @@ app.get('/api/messages', wrap(async (req, res) => {
     }))
   });
 }));
-
-// ── Guardado de mensajes de WhatsApp ──────────────────────────────────────
-// Reemplaza los webhooks n8n wa-save-in / wa-save-out. Persisten el mensaje en
-// la MISMA base (contacts/conversations/messages): upsert contacto (por
-// ghl_contact_id, si no por phone) -> upsert conversación (1 por contacto) ->
-// insert mensaje (idempotente por wamid, media base64->bytea) -> rollup.
-// Endpoints abiertos (sin auth), igual que los webhooks originales.
-const mediaLabel = (type) => ({
-  image: '[imagen]', audio: '[audio]', voice: '[audio]', ptt: '[audio]',
-  video: '[video]', document: '[documento]', sticker: '[sticker]'
-}[String(type || '').toLowerCase()] || '');
-
-async function saveWaMessage(direction, req, res) {
-  const b = req.body || {};
-  const ghlContactId = b.contactId ? String(b.contactId) : null;
-  const phone = b.phone ? String(b.phone) : null;
-  const name = b.name ? String(b.name) : null;
-  const channel = b.channel ? String(b.channel) : 'whatsapp';
-  const type = b.type ? String(b.type) : 'text';
-  const text = b.text != null ? String(b.text) : null;
-  const wamid = b.wamid ? String(b.wamid) : null;
-  const mediaUrl = b.mediaUrl ? String(b.mediaUrl) : null;
-  const mediaMime = b.mediaMime ? String(b.mediaMime) : null;
-  const filename = b.filename ? String(b.filename) : null;
-  const mediaData = b.mediaBase64 ? Buffer.from(String(b.mediaBase64), 'base64') : null;
-  const status = b.status ? String(b.status) : (direction === 'in' ? 'received' : 'sent');
-  const createdAt = (b.createdAt || b.timestamp) ? new Date(b.createdAt || b.timestamp) : new Date();
-
-  if (!ghlContactId && !phone) return res.status(400).json({ success: false, error: 'contactId or phone is required' });
-  const rollupText = (text && text.trim()) ? text.slice(0, 1000) : mediaLabel(type);
-
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
-
-    // 1) Contacto
-    let contactRowId;
-    if (ghlContactId) {
-      const r = await client.query(
-        `INSERT INTO contacts (ghl_contact_id, phone, name, created_at)
-         VALUES ($1, $2, $3, now())
-         ON CONFLICT (ghl_contact_id) DO UPDATE SET
-           phone = COALESCE(EXCLUDED.phone, contacts.phone),
-           name  = COALESCE(EXCLUDED.name,  contacts.name)
-         RETURNING id`, [ghlContactId, phone, name]);
-      contactRowId = r.rows[0].id;
-    } else {
-      const found = await client.query('SELECT id FROM contacts WHERE phone = $1 LIMIT 1', [phone]);
-      if (found.rows.length) {
-        contactRowId = found.rows[0].id;
-        if (name) await client.query('UPDATE contacts SET name = COALESCE(name, $2) WHERE id = $1', [contactRowId, name]);
-      } else {
-        const ins = await client.query('INSERT INTO contacts (phone, name, created_at) VALUES ($1, $2, now()) RETURNING id', [phone, name]);
-        contactRowId = ins.rows[0].id;
-      }
-    }
-
-    // 2) Conversación (única por contacto)
-    const conv = await client.query(
-      `INSERT INTO conversations (contact_id, channel, status, updated_at)
-       VALUES ($1, $2, 'open', now())
-       ON CONFLICT (contact_id) DO UPDATE SET updated_at = now()
-       RETURNING id`, [contactRowId, channel]);
-    const conversationId = conv.rows[0].id;
-
-    // 3) Mensaje (idempotente por wamid)
-    const msg = await client.query(
-      `INSERT INTO messages
-         (conversation_id, wamid, direction, type, text, media_url, status,
-          created_at, channel, media_mime, media_filename, media_data)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
-       ON CONFLICT (wamid) DO NOTHING
-       RETURNING id`,
-      [conversationId, wamid, direction, type, text, mediaUrl, status,
-       createdAt, channel, mediaMime, filename, mediaData]);
-
-    if (msg.rows.length === 0 && wamid) {
-      await client.query('COMMIT');
-      return res.status(200).json({ success: true, duplicate: true, conversationId: String(conversationId) });
-    }
-
-    // 4) Rollup de la conversación
-    if (direction === 'in') {
-      await client.query(
-        `UPDATE conversations SET last_message=$2, last_message_at=$3, last_direction='in',
-           last_status=$4, last_inbound=$3, unread_count=COALESCE(unread_count,0)+1, updated_at=now()
-         WHERE id=$1`, [conversationId, rollupText, createdAt, status]);
-    } else {
-      await client.query(
-        `UPDATE conversations SET last_message=$2, last_message_at=$3, last_direction='out',
-           last_status=$4, unread_count=0, updated_at=now()
-         WHERE id=$1`, [conversationId, rollupText, createdAt, status]);
-    }
-
-    await client.query('COMMIT');
-    return res.status(201).json({
-      success: true,
-      messageId: msg.rows[0] ? String(msg.rows[0].id) : null,
-      conversationId: String(conversationId),
-      contactId: String(contactRowId)
-    });
-  } catch (e) {
-    try { await client.query('ROLLBACK'); } catch (_) {}
-    console.error(`wa-save-${direction}`, e.message);
-    return res.status(500).json({ success: false, error: 'Failed to save message' });
-  } finally {
-    client.release();
-  }
-}
-
-app.post('/api/wa/save-in', wrap((req, res) => saveWaMessage('in', req, res)));
-app.post('/api/wa/save-out', wrap((req, res) => saveWaMessage('out', req, res)));
 
 app.use(express.static(path.join(__dirname, 'public')));
 app.get('*', (_req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
