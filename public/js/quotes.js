@@ -85,10 +85,26 @@
     </td></tr>`;
   }
 
+  // Recap del rango completo (no solo de la página): monto, cotizaciones y productos.
+  function renderRecap() {
+    const box = $('#quoRecap');
+    if (!box) return;
+    const d = data;
+    if (!d || !d.available) { box.innerHTML = ''; box.hidden = true; return; }
+    box.hidden = false;
+    const tile = (label, value, sub) =>
+      `<div class="quo__stat"><div class="quo__stat-val">${value}</div><div class="quo__stat-lbl">${label}</div>${sub ? `<div class="quo__stat-sub">${sub}</div>` : ''}</div>`;
+    box.innerHTML =
+      tile('Monto total cotizado', fmtRD(d.amount)) +
+      tile('Cotizaciones', fmtNum(d.total)) +
+      tile('Productos cotizados', fmtNum(d.products), d.units ? fmtNum(d.units) + ' unidades' : '');
+  }
+
   function render() {
     const d = data;
     const body = $('#quotesBody');
     if (!d) return;
+    renderRecap();
 
     if (!d.available) {
       body.innerHTML = `<tr><td colspan="8" class="msgs__empty">Base de cotizaciones (MSSQL) no configurada.</td></tr>`;

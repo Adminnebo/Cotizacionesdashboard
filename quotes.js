@@ -39,7 +39,7 @@ router.get('/quotes', optionalAuth, wrap(async (req, res) => {
 
   const r = await quotesList({ from, to, search, limit, offset: (page - 1) * limit });
   if (!r.available) {
-    return res.json({ available: false, page, limit, total: 0, amount: 0, items: [], error: 'MSSQL no configurado' });
+    return res.json({ available: false, page, limit, total: 0, amount: 0, products: 0, units: 0, items: [], error: 'MSSQL no configurado' });
   }
   res.json({
     available: true,
@@ -47,6 +47,8 @@ router.get('/quotes', optionalAuth, wrap(async (req, res) => {
     page, limit,
     total: r.total,
     amount: r.amount,
+    products: r.products,
+    units: r.units,
     items: r.items.map(x => ({ ...x, pdfUrl: pdfUrlFor(x.number) }))
   });
 }));

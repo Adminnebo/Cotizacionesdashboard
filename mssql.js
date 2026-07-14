@@ -67,20 +67,27 @@ async function quotesList({ from, to, search, limit = 50, offset = 0 }) {
     return r;
   };
 
-  const [rows, cnt] = await Promise.all([
+  const [rows, cnt, prod] = await Promise.all([
     bind().query(`SELECT nfactura, clientenombre, RNC, Telefono, Correo, Ciudad,
                          total, itbis, FechaRegistro, vencimiento, Estatus, Enviado
                   FROM iCotizacionesWebIA ${where}
                   ORDER BY FechaRegistro DESC, nfactura DESC
                   OFFSET ${Number(offset)} ROWS FETCH NEXT ${Number(limit)} ROWS ONLY`),
-    bind().query(`SELECT COUNT(*) AS n, COALESCE(SUM(total),0) AS monto FROM iCotizacionesWebIA ${where}`)
+    bind().query(`SELECT COUNT(*) AS n, COALESCE(SUM(total),0) AS monto FROM iCotizacionesWebIA ${where}`),
+    // productos cotizados (líneas) de las cotizaciones que caen en el mismo rango/búsqueda
+    bind().query(`SELECT COUNT(*) AS lineas, COALESCE(SUM(d.cantidad),0) AS unidades
+                  FROM dCotizacionesWebIA d
+                  WHERE d.nfactura IN (SELECT nfactura FROM iCotizacionesWebIA ${where})`)
   ]);
 
   const c = cnt.recordset[0] || {};
+  const pr = prod.recordset[0] || {};
   return {
     available: true,
     total: Number(c.n) || 0,
     amount: Number(c.monto) || 0,
+    products: Number(pr.lineas) || 0,      // nº de productos/líneas cotizados
+    units: Number(pr.unidades) || 0,       // suma de cantidades
     items: rows.recordset.map(h => ({
       number: Number(h.nfactura),
       client: (h.clientenombre || '').trim(),
