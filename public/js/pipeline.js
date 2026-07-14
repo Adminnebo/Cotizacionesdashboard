@@ -220,15 +220,17 @@
 
   async function load() {
     try {
-      if (!stages.length) {
-        const p = await api('/api/pipelines');
-        pipeline = (p.pipelines || [])[0] || null;
-        stages = pipeline ? pipeline.stages : [];
-      }
       const params = new URLSearchParams();
       if (filterChannel) params.set('channel', filterChannel);
       if (search) params.set('search', search);
-      const o = await api('/api/opportunities?' + params.toString());
+      // Siempre relee las etapas (por si se agregan/renombran/renumeran en el servidor)
+      // y las oportunidades, en paralelo.
+      const [p, o] = await Promise.all([
+        api('/api/pipelines'),
+        api('/api/opportunities?' + params.toString())
+      ]);
+      pipeline = (p.pipelines || [])[0] || null;
+      stages = pipeline ? pipeline.stages : [];
       opps = o.items;
       render();
     } catch (e) {
