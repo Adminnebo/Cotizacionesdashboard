@@ -49,6 +49,55 @@ async function quotesStat(from, to) {
   }
 }
 
+// Lista paginada de cotizaciones (cabeceras) en un rango, con búsqueda por
+// cliente / RNC / nº de cotización / teléfono. Devuelve items + total + monto.
+async function quotesList({ from, to, search, limit = 50, offset = 0 }) {
+  if (!process.env.MSSQL_SERVER) return { available: false, items: [], total: 0, amount: 0 };
+  const p = await getMssql();
+  if (!p) return { available: false, items: [], total: 0, amount: 0 };
+
+  const s = String(search || '').trim();
+  const where = `WHERE FechaRegistro >= @from AND FechaRegistro < @to` +
+    (s ? ` AND (clientenombre LIKE @s OR RNC LIKE @s OR Telefono LIKE @s OR CAST(nfactura AS VARCHAR(32)) LIKE @s)` : '');
+  const bind = () => {
+    const r = p.request()
+      .input('from', sql.DateTime, new Date(from))
+      .input('to', sql.DateTime, new Date(to));
+    if (s) r.input('s', sql.NVarChar, '%' + s + '%');
+    return r;
+  };
+
+  const [rows, cnt] = await Promise.all([
+    bind().query(`SELECT nfactura, clientenombre, RNC, Telefono, Correo, Ciudad,
+                         total, itbis, FechaRegistro, vencimiento, Estatus, Enviado
+                  FROM iCotizacionesWebIA ${where}
+                  ORDER BY FechaRegistro DESC, nfactura DESC
+                  OFFSET ${Number(offset)} ROWS FETCH NEXT ${Number(limit)} ROWS ONLY`),
+    bind().query(`SELECT COUNT(*) AS n, COALESCE(SUM(total),0) AS monto FROM iCotizacionesWebIA ${where}`)
+  ]);
+
+  const c = cnt.recordset[0] || {};
+  return {
+    available: true,
+    total: Number(c.n) || 0,
+    amount: Number(c.monto) || 0,
+    items: rows.recordset.map(h => ({
+      number: Number(h.nfactura),
+      client: (h.clientenombre || '').trim(),
+      rnc: (h.RNC || '').trim(),
+      phone: (h.Telefono || '').trim(),
+      email: (h.Correo || '').trim(),
+      city: (h.Ciudad || '').trim(),
+      total: Number(h.total) || 0,
+      itbis: Number(h.itbis) || 0,
+      date: h.FechaRegistro || null,
+      dueDate: h.vencimiento || null,
+      status: h.Estatus,
+      sent: !!h.Enviado
+    }))
+  };
+}
+
 // Reconstruye una cotización: cabecera (iCotizacionesWebIA) + líneas (dCotizacionesWebIA),
 // unidas por nfactura. Devuelve null si no hay MSSQL o no existe la cotización.
 async function quoteDetail(nfactura) {
@@ -96,4 +145,4 @@ async function quoteDetail(nfactura) {
   };
 }
 
-module.exports = { sql, getMssql, quotesStat, quoteDetail };
+module.exports = { sql, getMssql, quotesStat, quotesList, quoteDetail };

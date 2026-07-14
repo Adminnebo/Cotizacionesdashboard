@@ -208,6 +208,29 @@ table.msgs { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 .oppcard__meta { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 8px; font-size: 11.5px; color: var(--text-muted); }
 .oppcard__phone { font-variant-numeric: tabular-nums; }
 
+/* ===== Pestaña Cotizaciones (fila desplegable con los productos) ===== */
+.quotes .quo__exp { width: 30px; text-align: center; }
+.quo__row { cursor: pointer; }
+.quo__row:hover { background: var(--surface-2, rgba(127,127,127,.06)); }
+.quo__caret { color: var(--text-muted); font-size: 11px; }
+.quo__row--open { background: var(--surface-2, rgba(127,127,127,.06)); }
+.quo__row--open .quo__caret { color: var(--text-primary); }
+.quo__sent { color: var(--good); font-weight: 600; }
+
+.quo__detail > td { padding: 0 !important; background: var(--surface-0); }
+.quo__panel { padding: 14px 18px 16px; border-left: 3px solid var(--accent, #6366f1); }
+.quo__loading, .quo__err { padding: 14px 18px; color: var(--text-muted); }
+.quo__err { color: var(--bad, #ef4444); }
+.quo__meta { font-size: 12px; color: var(--text-muted); margin-bottom: 6px; }
+.quo__notes { font-size: 12px; color: var(--text-secondary); margin-bottom: 10px; }
+
+.quo__lines { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.quo__lines th, .quo__lines td { padding: 7px 10px; border-bottom: 1px solid var(--border); text-align: left; }
+.quo__lines th { color: var(--text-muted); font-weight: 600; font-size: 11.5px; text-transform: uppercase; letter-spacing: .03em; }
+.quo__lines .num { text-align: right; font-variant-numeric: tabular-nums; }
+.quo__lines tbody tr:last-child td { border-bottom: none; }
+.quo__lines tfoot td { border-top: 2px solid var(--border); border-bottom: none; padding-top: 9px; }
+
 /* ===== Modal de oportunidad (título, canal, fecha, PDF preview) ===== */
 .modal { position: fixed; inset: 0; z-index: 60; background: rgba(0,0,0,.5); display: flex; align-items: flex-start; justify-content: center; padding: 32px 16px; overflow-y: auto; }
 .modal[hidden] { display: none; }
