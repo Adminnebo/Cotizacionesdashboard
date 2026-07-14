@@ -274,6 +274,7 @@
     let t = 'light'; try { t = localStorage.getItem('an_theme') || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'); } catch (_) {}
     applyTheme(t);
     if (window.Pipeline) Pipeline.init();
+    if (window.Quotes) Quotes.init({ rangeParams, authHeaders });
     $('#rangeSeg').addEventListener('click', e => {
       const b = e.target.closest('.seg'); if (!b) return;
       $('#rangeSeg').querySelectorAll('.seg').forEach(x => x.classList.remove('seg--active'));
@@ -283,6 +284,7 @@
       $('#dateFrom').value = ''; $('#dateTo').value = ''; $('#dateClear').hidden = true;
       msgPage = 1;
       load(); loadMessages();
+      if (window.Quotes) Quotes.refreshIfVisible();
     });
     $('#dateApply').addEventListener('click', () => {
       const f = $('#dateFrom').value, t = $('#dateTo').value;
@@ -292,6 +294,7 @@
       $('#dateClear').hidden = false;
       msgPage = 1;
       load(); loadMessages();
+      if (window.Quotes) Quotes.refreshIfVisible();
     });
     $('#dateClear').addEventListener('click', () => {
       customFrom = customTo = null;
@@ -300,6 +303,7 @@
       $('#rangeSeg').querySelectorAll('.seg').forEach(x => x.classList.toggle('seg--active', x.dataset.days === '30'));
       msgPage = 1;
       load(); loadMessages();
+      if (window.Quotes) Quotes.refreshIfVisible();
     });
     $('#tabs').addEventListener('click', e => {
       const b = e.target.closest('.tab'); if (!b) return;
@@ -309,9 +313,11 @@
       $('#tabResumen').hidden = t !== 'resumen';
       $('#tabMensajes').hidden = t !== 'mensajes';
       $('#tabPipeline').hidden = t !== 'pipeline';
+      $('#tabCotizaciones').hidden = t !== 'cotizaciones';
       $('#tabRegistros').hidden = t !== 'registros';
       if (t === 'registros') { logsPage = 1; loadLogs(); }
       if (t === 'pipeline' && window.Pipeline) Pipeline.load();
+      if (t === 'cotizaciones' && window.Quotes) Quotes.load();
     });
     $('#logsPager').addEventListener('click', e => {
       const b = e.target.closest('.pgbtn'); if (!b || b.disabled) return;
@@ -352,6 +358,7 @@
       if (window.Auth) { const s = await Auth.requireSession(); if (!s) return; } // exige sesión
       await setupAuth();
       load(); loadMessages();
+      if (window.Quotes) Quotes.refreshIfVisible();
     })();
     setInterval(() => { load(); loadMessages(); }, 60000); // refresco cada minuto
   }

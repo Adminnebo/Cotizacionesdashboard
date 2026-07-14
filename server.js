@@ -8,6 +8,7 @@ const path = require('path');
 const express = require('express');
 const { q } = require('./db');
 const { quotesStat } = require('./mssql');
+const { rangeOf } = require('./range');
 const { configured: authCfg, optionalAuth, URL: SB_URL, ANON: SB_ANON } = require('./analyticsAuth');
 
 const app = express();
@@ -23,38 +24,16 @@ const COST_CCY = process.env.MSG_COST_CURRENCY || 'USD';
 
 const wrap = fn => (req, res) => Promise.resolve(fn(req, res)).catch(e => { console.error(req.path, e.message); res.status(500).json({ error: e.message }); });
 
-// Rango de fechas: ?from=YYYY-MM-DD&to=YYYY-MM-DD (fechas específicas) o ?days=N|all.
-// 'to' es inclusivo (día completo). Devuelve {from, to} ISO. Mínimo 2000-01-01.
-function rangeOf(req) {
-  const now = Date.now();
-  const minMs = Date.parse('2000-01-01T00:00:00Z');
-  const day = 86400000;
-  let fromMs, toMs;
-  const qf = String(req.query.from || '').trim();
-  const qt = String(req.query.to || '').trim();
-  if (qf || qt) {
-    fromMs = qf ? Date.parse(qf) : minMs;
-    const dateOnly = /^\d{4}-\d{2}-\d{2}$/.test(qt);       // solo fecha => incluye el día completo
-    toMs = qt ? Date.parse(qt) + (dateOnly ? day : 0) : now;
-    if (isNaN(fromMs)) fromMs = minMs;
-    if (isNaN(toMs)) toMs = now;
-  } else {
-    const days = req.query.days === 'all' ? 100000 : (Number(req.query.days) || 30);
-    fromMs = now - days * day;
-    toMs = now + 1000;
-  }
-  if (fromMs < minMs) fromMs = minMs;
-  if (toMs < fromMs) toMs = fromMs + day;
-  return { from: new Date(fromMs).toISOString(), to: new Date(toMs).toISOString() };
-}
+// El rango de fechas (?days / ?from&to) se parsea en ./range.js (compartido).
 
-// Cotizaciones: viven en una base MSSQL aparte (site4now). La conexión y las
-// consultas (quotesStat / quoteDetail) están centralizadas en ./mssql.js.
+// Cotizaciones: los datos viven en una base MSSQL aparte (site4now) y el PDF en
+// Supabase Storage. Consultas centralizadas en ./mssql.js; rutas en ./quotes.js.
 
 app.get('/api/health', (_req, res) => res.json({ ok: true }));
 app.get('/api/auth/config', (_req, res) => res.json({ supabaseUrl: SB_URL, supabaseAnonKey: SB_ANON, configured: authCfg }));
 app.use('/api/auth', require('./authUsers')); // /api/auth/me, /users (solo admin/super_admin)
 app.use('/api', require('./pipeline'));       // pipeline/oportunidades + webhook n8n
+app.use('/api', require('./quotes'));         // cotizaciones (MSSQL) + PDF (Supabase)
 
 app.get('/api/stats', optionalAuth, wrap(async (req, res) => {
   const { from, to } = rangeOf(req);
