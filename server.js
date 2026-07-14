@@ -6,8 +6,8 @@
 'use strict';
 const path = require('path');
 const express = require('express');
-const sql = require('mssql');
 const { q } = require('./db');
+const { quotesStat } = require('./mssql');
 const { configured: authCfg, optionalAuth, URL: SB_URL, ANON: SB_ANON } = require('./analyticsAuth');
 
 const app = express();
@@ -48,50 +48,13 @@ function rangeOf(req) {
   return { from: new Date(fromMs).toISOString(), to: new Date(toMs).toISOString() };
 }
 
-// Cotizaciones: viven en una base MSSQL aparte (site4now). Conexión por env MSSQL_*.
-// Cuenta las filas de la tabla de cotizaciones en el rango de fechas.
-let mssqlPool = null;
-async function getMssql() {
-  if (!process.env.MSSQL_SERVER) return null;
-  if (mssqlPool && mssqlPool.connected) return mssqlPool;
-  try {
-    const pool = new sql.ConnectionPool({
-      server: process.env.MSSQL_SERVER,
-      database: process.env.MSSQL_DATABASE,
-      user: process.env.MSSQL_USER,
-      password: process.env.MSSQL_PASSWORD,
-      port: Number(process.env.MSSQL_PORT || 1433),
-      options: { encrypt: process.env.MSSQL_ENCRYPT === 'true', trustServerCertificate: true },
-      pool: { max: 4, idleTimeoutMillis: 30000 },
-      connectionTimeout: 15000, requestTimeout: 15000
-    });
-    mssqlPool = await pool.connect();
-    mssqlPool.on('error', () => { mssqlPool = null; });
-    return mssqlPool;
-  } catch (e) { mssqlPool = null; throw e; }
-}
-async function quotesStat(from, to) {
-  if (!process.env.MSSQL_SERVER) return { available: false };
-  const table = process.env.MSSQL_QUOTES_TABLE || 'iCotizacionesWebIA';
-  const dateCol = process.env.MSSQL_QUOTES_DATE || 'FechaRegistro';
-  const amountCol = process.env.MSSQL_QUOTES_AMOUNT || 'total';
-  try {
-    const pool = await getMssql();
-    const r = await pool.request()
-      .input('from', sql.DateTime, new Date(from))
-      .input('to', sql.DateTime, new Date(to || Date.now()))
-      .query(`SELECT COUNT(*) AS n, COALESCE(SUM([${amountCol}]),0) AS monto FROM [${table}] WHERE [${dateCol}] >= @from AND [${dateCol}] < @to`);
-    const row = r.recordset[0] || {};
-    return { available: true, count: Number(row.n) || 0, amount: Number(row.monto) || 0 };
-  } catch (e) {
-    mssqlPool = null;
-    return { available: false, error: e.message };
-  }
-}
+// Cotizaciones: viven en una base MSSQL aparte (site4now). La conexión y las
+// consultas (quotesStat / quoteDetail) están centralizadas en ./mssql.js.
 
 app.get('/api/health', (_req, res) => res.json({ ok: true }));
 app.get('/api/auth/config', (_req, res) => res.json({ supabaseUrl: SB_URL, supabaseAnonKey: SB_ANON, configured: authCfg }));
 app.use('/api/auth', require('./authUsers')); // /api/auth/me, /users (solo admin/super_admin)
+app.use('/api', require('./pipeline'));       // pipeline/oportunidades + webhook n8n
 
 app.get('/api/stats', optionalAuth, wrap(async (req, res) => {
   const { from, to } = rangeOf(req);

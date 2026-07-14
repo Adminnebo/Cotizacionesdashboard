@@ -273,6 +273,7 @@
   function init() {
     let t = 'light'; try { t = localStorage.getItem('an_theme') || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'); } catch (_) {}
     applyTheme(t);
+    if (window.Pipeline) Pipeline.init();
     $('#rangeSeg').addEventListener('click', e => {
       const b = e.target.closest('.seg'); if (!b) return;
       $('#rangeSeg').querySelectorAll('.seg').forEach(x => x.classList.remove('seg--active'));
@@ -307,8 +308,10 @@
       const t = b.dataset.tab;
       $('#tabResumen').hidden = t !== 'resumen';
       $('#tabMensajes').hidden = t !== 'mensajes';
+      $('#tabPipeline').hidden = t !== 'pipeline';
       $('#tabRegistros').hidden = t !== 'registros';
       if (t === 'registros') { logsPage = 1; loadLogs(); }
+      if (t === 'pipeline' && window.Pipeline) Pipeline.load();
     });
     $('#logsPager').addEventListener('click', e => {
       const b = e.target.closest('.pgbtn'); if (!b || b.disabled) return;
