@@ -219,6 +219,15 @@ table.msgs { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 .quo__stat:first-child .quo__stat-val { color: var(--good); }
 @media (max-width: 720px) { .quo__recap { grid-template-columns: 1fr; } }
 
+/* ===== Pestaña Llamadas: desglose por agente y detalle ===== */
+.call__agents { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 0 0 18px; }
+.call__agents-title { font-size: 12px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: .03em; margin-right: 2px; }
+.call__agent { display: inline-flex; align-items: baseline; gap: 6px; background: var(--surface-0); border: 1px solid var(--border); border-radius: 999px; padding: 5px 12px; font-size: 12.5px; }
+.call__rec { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+.call__rec audio { height: 34px; max-width: 340px; }
+.call__transcript-lbl { font-size: 11.5px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: .03em; margin-bottom: 6px; }
+.call__transcript { font-size: 13px; line-height: 1.55; color: var(--text-secondary); white-space: pre-wrap; max-height: 340px; overflow-y: auto; background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
+
 /* fila desplegable con los productos */
 .quotes .quo__exp { width: 30px; text-align: center; }
 .quo__row { cursor: pointer; }

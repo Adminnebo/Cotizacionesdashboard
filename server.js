@@ -34,6 +34,7 @@ app.get('/api/auth/config', (_req, res) => res.json({ supabaseUrl: SB_URL, supab
 app.use('/api/auth', require('./authUsers')); // /api/auth/me, /users (solo admin/super_admin)
 app.use('/api', require('./pipeline'));       // pipeline/oportunidades + webhook n8n
 app.use('/api', require('./quotes'));         // cotizaciones (MSSQL) + PDF (Supabase)
+app.use('/api', require('./calls'));          // llamadas del agente de voz + webhook n8n
 
 app.get('/api/stats', optionalAuth, wrap(async (req, res) => {
   const { from, to } = rangeOf(req);
