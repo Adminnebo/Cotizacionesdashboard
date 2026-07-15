@@ -275,6 +275,7 @@
     applyTheme(t);
     if (window.Pipeline) Pipeline.init();
     if (window.Quotes) Quotes.init({ rangeParams, authHeaders });
+    if (window.Calls) Calls.init({ rangeParams, authHeaders });
     $('#rangeSeg').addEventListener('click', e => {
       const b = e.target.closest('.seg'); if (!b) return;
       $('#rangeSeg').querySelectorAll('.seg').forEach(x => x.classList.remove('seg--active'));
@@ -285,6 +286,7 @@
       msgPage = 1;
       load(); loadMessages();
       if (window.Quotes) Quotes.refreshIfVisible();
+      if (window.Calls) Calls.refreshIfVisible();
     });
     $('#dateApply').addEventListener('click', () => {
       const f = $('#dateFrom').value, t = $('#dateTo').value;
@@ -295,6 +297,7 @@
       msgPage = 1;
       load(); loadMessages();
       if (window.Quotes) Quotes.refreshIfVisible();
+      if (window.Calls) Calls.refreshIfVisible();
     });
     $('#dateClear').addEventListener('click', () => {
       customFrom = customTo = null;
@@ -304,6 +307,7 @@
       msgPage = 1;
       load(); loadMessages();
       if (window.Quotes) Quotes.refreshIfVisible();
+      if (window.Calls) Calls.refreshIfVisible();
     });
     $('#tabs').addEventListener('click', e => {
       const b = e.target.closest('.tab'); if (!b) return;
@@ -314,10 +318,12 @@
       $('#tabMensajes').hidden = t !== 'mensajes';
       $('#tabPipeline').hidden = t !== 'pipeline';
       $('#tabCotizaciones').hidden = t !== 'cotizaciones';
+      $('#tabLlamadas').hidden = t !== 'llamadas';
       $('#tabRegistros').hidden = t !== 'registros';
       if (t === 'registros') { logsPage = 1; loadLogs(); }
       if (t === 'pipeline' && window.Pipeline) Pipeline.load();
       if (t === 'cotizaciones' && window.Quotes) Quotes.load();
+      if (t === 'llamadas' && window.Calls) Calls.load();
     });
     $('#logsPager').addEventListener('click', e => {
       const b = e.target.closest('.pgbtn'); if (!b || b.disabled) return;
@@ -359,6 +365,7 @@
       await setupAuth();
       load(); loadMessages();
       if (window.Quotes) Quotes.refreshIfVisible();
+      if (window.Calls) Calls.refreshIfVisible();
     })();
     setInterval(() => { load(); loadMessages(); }, 60000); // refresco cada minuto
   }

@@ -43,6 +43,7 @@
     <button class="tab" data-tab="mensajes" role="tab">💬 Mensajes</button>
     <button class="tab" data-tab="pipeline" role="tab">🗂️ Pipeline</button>
     <button class="tab" data-tab="cotizaciones" role="tab">📄 Cotizaciones</button>
+    <button class="tab" data-tab="llamadas" role="tab">📞 Llamadas</button>
     <button class="tab" data-tab="registros" role="tab">📋 Registros</button>
   </nav>
 
@@ -173,6 +174,37 @@
       </section>
     </div>
 
+    <!-- Pestaña: Llamadas (agente de voz; se alimenta desde n8n) -->
+    <div class="tabpanel" id="tabLlamadas" hidden>
+      <section class="card card--wide">
+        <div class="card__head">
+          <h2>Llamadas</h2>
+          <input type="search" id="callSearch" class="search-input" placeholder="Buscar número, agente o transcripción…" autocomplete="off" />
+          <button class="icon-btn" id="callRefresh" title="Actualizar">↻</button>
+        </div>
+        <div class="quo__recap" id="callRecap"></div>
+        <div id="callAgents" class="call__agents"></div>
+        <div class="tablewrap">
+          <table class="msgs quotes" id="callsTable">
+            <thead>
+              <tr>
+                <th class="quo__exp"></th>
+                <th>Fecha</th>
+                <th>Agente</th>
+                <th>Número</th>
+                <th class="num">Duración</th>
+                <th class="num">Coste</th>
+                <th>Grabación</th>
+              </tr>
+            </thead>
+            <tbody id="callsBody"><tr><td colspan="7" class="msgs__empty">Cargando…</td></tr></tbody>
+          </table>
+        </div>
+        <div class="pager" id="callsPager"></div>
+        <p class="card__note">Cada fila es una llamada del agente de voz. Haz clic para ver la transcripción completa. Los datos los envía n8n a <code>POST /api/calls/hook</code>.</p>
+      </section>
+    </div>
+
     <!-- Pestaña: Registros (acciones de la interfaz) -->
     <div class="tabpanel" id="tabRegistros" hidden>
       <section class="card card--wide">
@@ -219,6 +251,7 @@
   <script src="js/charts.js"></script>
   <script src="js/pipeline.js"></script>
   <script src="js/quotes.js"></script>
+  <script src="js/calls.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>
