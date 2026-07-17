@@ -71,7 +71,9 @@
     if (!stages.length) { wrap.innerHTML = '<p class="board__err">Sin etapas configuradas.</p>'; return; }
     const byStage = {};
     opps.forEach(o => { (byStage[o.stageId] = byStage[o.stageId] || []).push(o); });
-    Object.values(byStage).forEach(list => list.sort((a, b) => a.position - b.position));
+    // Descendente: mayor position arriba. Como cada oportunidad nueva entra con
+    // MAX(position)+1, las más recientes quedan arriba; el arrastre manual manda igual.
+    Object.values(byStage).forEach(list => list.sort((a, b) => b.position - a.position));
 
     wrap.innerHTML = stages.map(s => {
       const list = byStage[s.id] || [];
@@ -124,12 +126,19 @@
     const card = $('#boardWrap').querySelector(`.oppcard[data-id="${moved.id}"]`);
     if (!card) return;
     const after = getAfterElement(body, clientY);
-    const inStage = opps.filter(o => String(o.stageId) === String(stageId) && o.id !== dragId).sort((a, b) => a.position - b.position);
+    // La columna se pinta en DESCENDENTE (mayor position arriba). La tarjeta soltada
+    // queda justo encima de `after`, así que su position va entre la de arriba (mayor)
+    // y la de `after` (menor).
+    const inStage = opps.filter(o => String(o.stageId) === String(stageId) && o.id !== dragId).sort((a, b) => b.position - a.position);
     let idx = inStage.length;
     if (after) { const aid = after.dataset.id; const f = inStage.findIndex(o => o.id === aid); if (f >= 0) idx = f; }
-    const prev = idx > 0 ? inStage[idx - 1].position : 0;
-    const next = idx < inStage.length ? inStage[idx].position : prev + 2;
-    const newPos = (prev + next) / 2;
+    const above = idx > 0 ? inStage[idx - 1].position : null;         // tarjeta de arriba (mayor)
+    const below = idx < inStage.length ? inStage[idx].position : null; // tarjeta de abajo (menor)
+    let newPos;
+    if (above == null && below == null) newPos = 0;                   // columna vacía
+    else if (above == null) newPos = below + 1;                       // soltada arriba del todo
+    else if (below == null) newPos = above - 1;                       // soltada abajo del todo
+    else newPos = (above + below) / 2;                               // entre dos
     const prevStage = String(moved.stageId);
     moved.stageId = String(stageId); moved.position = newPos;
 

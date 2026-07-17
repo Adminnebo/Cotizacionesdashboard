@@ -191,7 +191,7 @@ router.get('/opportunities', wrap(async (req, res) => {
     params.push('%' + search + '%');
     where += ` AND (title ILIKE $${params.length} OR phone ILIKE $${params.length} OR CAST(quote_number AS TEXT) ILIKE $${params.length})`;
   }
-  const r = await q(`SELECT * FROM opportunities WHERE ${where} ORDER BY stage_id, position, id`, params);
+  const r = await q(`SELECT * FROM opportunities WHERE ${where} ORDER BY stage_id, position DESC, id DESC`, params);
   res.json({ pipelineId: pid != null ? String(pid) : null, items: r.rows.map(shapeOpp) });
 }));
 
