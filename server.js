@@ -12,6 +12,29 @@ const { rangeOf } = require('./range');
 const { configured: authCfg, optionalAuth, URL: SB_URL, ANON: SB_ANON } = require('./analyticsAuth');
 
 const app = express();
+
+// ── CORS para la app móvil ───────────────────────────────────────────────────
+// La app de Capacitor no se sirve desde este dominio: iOS llega como
+// capacitor://localhost y Android como https://localhost. Sin esto el WebView
+// bloquea las llamadas. La web propia va por mismo origen y no manda Origin.
+const CORS_OK = new Set([
+  'capacitor://localhost', 'ionic://localhost', 'http://localhost', 'https://localhost',
+  ...String(process.env.CORS_EXTRA || '').split(',').map(s => s.trim()).filter(Boolean)
+]);
+app.use((req, res, next) => {
+  const origin = req.get('origin');
+  if (origin && (CORS_OK.has(origin) || /^https?:\/\/localhost(:\d+)?$/.test(origin))) {
+    res.set('Access-Control-Allow-Origin', origin);
+    res.set('Vary', 'Origin');
+    res.set('Access-Control-Allow-Credentials', 'true');
+    res.set('Access-Control-Allow-Headers', 'Authorization, Content-Type');
+    res.set('Access-Control-Allow-Methods', 'GET, POST, PATCH, DELETE, OPTIONS');
+    res.set('Access-Control-Max-Age', '86400');
+  }
+  if (req.method === 'OPTIONS') return res.sendStatus(204);
+  next();
+});
+
 app.use(express.json({ limit: '2mb' }));   // necesario para POST/PATCH (crear usuarios)
 const PORT = process.env.PORT || 8080;
 const TZ = process.env.TZ_DISPLAY || 'America/Santo_Domingo';
