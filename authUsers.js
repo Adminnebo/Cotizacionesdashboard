@@ -6,9 +6,10 @@
    ========================================================= */
 'use strict';
 const express = require('express');
-const { URL, SERVICE, configured, roleForToken } = require('./analyticsAuth');
+const { URL, SERVICE, configured, roleForToken, userForToken, plataformasDe, PLATAFORMAS } = require('./analyticsAuth');
 const router = express.Router();
 const ROLES = ['admin', 'agent'];
+function limpiarPlataformas(v){ if(!Array.isArray(v)) return null; return [...new Set(v.map(String))].filter(x=>PLATAFORMAS.includes(x)); }
 
 const svc = (extra) => Object.assign({ apikey: SERVICE, Authorization: 'Bearer ' + SERVICE, 'Content-Type': 'application/json' }, extra || {});
 async function tokenRole(req) {
@@ -26,19 +27,21 @@ async function requireAdmin(req, res, next) {
 
 // Rol del usuario actual (para que el frontend muestre/oculte la sección).
 router.get('/me', async (req, res) => {
-  res.json({ role: (await tokenRole(req)) || null });
+  const h=req.headers.authorization||''; const t=h.startsWith('Bearer ')?h.slice(7):'';
+  const u=await userForToken(t);
+  res.json({ role: u?u.role:null, platforms: u?u.platforms:null });
 });
 
 router.get('/users', requireAdmin, async (_req, res) => {
   const ures = await fetch(URL + '/auth/v1/admin/users?page=1&per_page=500', { headers: svc() });
   if (!ures.ok) return res.status(500).json({ error: 'listUsers ' + ures.status });
   const uj = await ures.json();
-  const pres = await fetch(URL + '/rest/v1/profiles?select=id,role,full_name', { headers: svc() });
+  const pres = await fetch(URL + '/rest/v1/profiles?select=id,role,full_name,platforms', { headers: svc() });
   const profs = pres.ok ? await pres.json() : [];
   const pmap = {}; profs.forEach(p => { pmap[p.id] = p; });
   const users = (uj.users || []).map(u => {
     const p = pmap[u.id] || {};
-    return { id: u.id, email: u.email, createdAt: u.created_at, lastSignInAt: u.last_sign_in_at, role: p.role || 'agent', fullName: p.full_name || null };
+    return { id: u.id, email: u.email, createdAt: u.created_at, lastSignInAt: u.last_sign_in_at, role: p.role || 'agent', fullName: p.full_name || null, platforms: plataformasDe(p.role, p.platforms) };
   });
   res.json({ users });
 });
@@ -52,7 +55,7 @@ router.post('/users', requireAdmin, async (req, res) => {
   const cres = await fetch(URL + '/auth/v1/admin/users', { method: 'POST', headers: svc(), body: JSON.stringify({ email, password, email_confirm: true }) });
   const cj = await cres.json().catch(() => ({}));
   if (!cres.ok) return res.status(400).json({ error: cj.msg || cj.error_description || ('createUser ' + cres.status) });
-  await fetch(URL + '/rest/v1/profiles', { method: 'POST', headers: svc({ Prefer: 'resolution=merge-duplicates,return=minimal' }), body: JSON.stringify({ id: cj.id, email, role, full_name: b.fullName || null }) });
+  await fetch(URL + '/rest/v1/profiles', { method: 'POST', headers: svc({ Prefer: 'resolution=merge-duplicates,return=minimal' }), body: JSON.stringify(Object.assign({ id: cj.id, email, role, full_name: b.fullName || null }, limpiarPlataformas(b.platforms)?{platforms:limpiarPlataformas(b.platforms)}:{})) });
   res.status(201).json({ ok: true, id: cj.id });
 });
 
@@ -61,6 +64,7 @@ router.patch('/users/:id', requireAdmin, async (req, res) => {
   const patch = {};
   if (b.role && ROLES.includes(b.role)) patch.role = b.role;
   if ('fullName' in b) patch.full_name = b.fullName || null;
+  if ('platforms' in b) { const p=limpiarPlataformas(b.platforms); if(p) patch.platforms=p; }
   const authUpd = {};
   if (b.password) authUpd.password = String(b.password);
   if (b.email) { authUpd.email = String(b.email).trim().toLowerCase(); patch.email = authUpd.email; }

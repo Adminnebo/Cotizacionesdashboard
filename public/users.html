@@ -53,6 +53,7 @@
         <div><label>Contraseña</label><input type="text" id="nPass" placeholder="mínimo 6" /></div>
         <div><label>Nombre</label><input type="text" id="nName" placeholder="opcional" /></div>
         <div><label>Rol</label><select id="nRole"><option value="agent">Agente</option><option value="admin">Admin</option></select></div>
+        <div style="grid-column:1/-1"><label>Acceso a plataformas</label><div class="plats" id="nPlats"></div><div class="plats__nota" id="nPlatsNota"></div></div>
         <div><button class="btn btn--primary" id="createBtn">Crear</button></div>
       </div>
       <div class="msg" id="createMsg"></div>
@@ -74,6 +75,7 @@
       <label>Correo</label><input type="email" id="eEmail" />
       <label>Nombre</label><input type="text" id="eName" />
       <label>Rol</label><select id="eRole"><option value="agent">Agente</option><option value="admin">Admin</option></select>
+      <label>Acceso a plataformas</label><div class="plats" id="ePlats"></div><div class="plats__nota" id="ePlatsNota"></div>
       <label>Nueva contraseña <span class="dim">(vacío = no cambiar)</span></label><input type="text" id="ePass" placeholder="••••••" />
       <div class="modal__actions"><button class="btn" id="eCancel">Cancelar</button><button class="btn btn--primary" id="eSave">Guardar</button></div>
       <div class="msg" id="editMsg"></div>
@@ -115,8 +117,24 @@
         </td></tr>`).join('') || '<tr><td colspan="5" class="dim">Sin usuarios.</td></tr>';
     }
 
+    // ---- casillas de acceso por plataforma ----
+    const PLATS = [['inbox', 'Conversaciones'], ['cotizaciones', 'Cotizaciones'], ['cobranzas', 'Cobranzas']];
+    function renderPlats(boxId, notaId, seleccion, role) {
+      const admin = role === 'admin' || role === 'super_admin';
+      const marcadas = admin ? PLATS.map(p => p[0]) : (seleccion || PLATS.map(p => p[0]));
+      $('#' + boxId).innerHTML = PLATS.map(([k, t]) => {
+        const on = marcadas.includes(k);
+        return `<label class="plat ${on ? 'plat--on' : ''} ${admin ? 'plat--lock' : ''}"><input type="checkbox" value="${k}" ${on ? 'checked' : ''} ${admin ? 'disabled' : ''}> ${t}</label>`;
+      }).join('');
+      $('#' + notaId).textContent = admin ? 'Los administradores acceden a todas las plataformas.' : 'Marca a qué plataformas puede entrar este agente.';
+      $('#' + boxId).querySelectorAll('.plat input').forEach(i => i.addEventListener('change', e => e.target.closest('.plat').classList.toggle('plat--on', e.target.checked)));
+    }
+    const readPlats = boxId => [...$('#' + boxId).querySelectorAll('.plat input:checked')].map(i => i.value);
+    renderPlats('nPlats', 'nPlatsNota', null, $('#nRole').value);
+    $('#nRole').addEventListener('change', () => renderPlats('nPlats', 'nPlatsNota', readPlats('nPlats'), $('#nRole').value));
+
     $('#createBtn').addEventListener('click', async () => {
-      const body = { email: $('#nEmail').value.trim(), password: $('#nPass').value, fullName: $('#nName').value.trim() || null, role: $('#nRole').value };
+      const body = { email: $('#nEmail').value.trim(), password: $('#nPass').value, fullName: $('#nName').value.trim() || null, role: $('#nRole').value, platforms: readPlats('nPlats') };
       const m = $('#createMsg');
       const r = await Auth.fetch('/api/auth/users', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       const d = await r.json().catch(() => ({}));
@@ -142,16 +160,18 @@
       const roleSel = $('#eRole');
       if (u.role === 'super_admin') { roleSel.innerHTML = '<option value="super_admin">Super admin (solo por API)</option>'; roleSel.value = 'super_admin'; roleSel.disabled = true; }
       else { roleSel.innerHTML = '<option value="agent">Agente</option><option value="admin">Admin</option>'; roleSel.value = u.role; roleSel.disabled = false; }
+      renderPlats('ePlats', 'ePlatsNota', u.platforms, u.role);
       $('#ePass').value = ''; $('#editMsg').textContent = '';
       $('#editModal').hidden = false;
     }
     function closeEdit() { $('#editModal').hidden = true; editingId = null; }
     $('#eCancel').addEventListener('click', closeEdit);
     $('#editModal').addEventListener('click', e => { if (e.target.id === 'editModal') closeEdit(); });
+    $('#eRole').addEventListener('change', () => renderPlats('ePlats', 'ePlatsNota', readPlats('ePlats'), $('#eRole').value));
 
     $('#eSave').addEventListener('click', async () => {
       if (!editingId) return;
-      const patch = { email: $('#eEmail').value.trim(), fullName: $('#eName').value.trim() || null };
+      const patch = { email: $('#eEmail').value.trim(), fullName: $('#eName').value.trim() || null, platforms: readPlats('ePlats') };
       if (!$('#eRole').disabled) patch.role = $('#eRole').value;
       const pass = $('#ePass').value; if (pass) patch.password = pass;
       const r = await Auth.fetch('/api/auth/users/' + editingId, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(patch) });

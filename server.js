@@ -55,6 +55,16 @@ const wrap = fn => (req, res) => Promise.resolve(fn(req, res)).catch(e => { cons
 app.get('/api/health', (_req, res) => res.json({ ok: true }));
 app.get('/api/auth/config', (_req, res) => res.json({ supabaseUrl: SB_URL, supabaseAnonKey: SB_ANON, configured: authCfg }));
 app.use('/api/auth', require('./authUsers')); // /api/auth/me, /users (solo admin/super_admin)
+
+// ── Gate de plataforma: todo lo demás exige acceso a 'cotizaciones' ──────────
+// Se eximen los webhooks de n8n (llevan su propia API key) y health.
+const { requirePlatform } = require('./analyticsAuth');
+const ABIERTAS = [/^\/hooks\//, /^\/calls\/hook$/, /^\/health$/];
+app.use('/api', (req, res, next) => {
+  if (ABIERTAS.some(re => re.test(req.path))) return next();
+  requirePlatform('cotizaciones')(req, res, next);
+});
+
 app.use('/api', require('./pipeline'));       // pipeline/oportunidades + webhook n8n
 app.use('/api', require('./quotes'));         // cotizaciones (MSSQL) + PDF (Supabase)
 app.use('/api', require('./calls'));          // llamadas del agente de voz + webhook n8n

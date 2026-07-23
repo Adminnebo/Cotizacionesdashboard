@@ -79,9 +79,21 @@
     const s = await Auth.session();
     if (s) { btn.textContent = 'Salir'; btn.title = s.user.email; btn.onclick = () => Auth.signOut(); }
     else { btn.textContent = 'Entrar'; btn.title = 'Iniciar sesión'; btn.onclick = () => (location.href = '/login.html'); }
-    if (s && usersBtn) {
-      try { const me = await (await Auth.fetch('/api/auth/me')).json(); if (['admin', 'super_admin'].includes(me.role)) usersBtn.hidden = false; } catch (_) {}
+    if (s) {
+      try {
+        const me = await (await Auth.fetch('/api/auth/me')).json();
+        // Puerta de acceso: si no tiene 'cotizaciones', no entra.
+        const plats = me.platforms || [];
+        if (Array.isArray(plats) && plats.length && !plats.includes('cotizaciones')) return sinAcceso(plats);
+        if (usersBtn && ['admin', 'super_admin'].includes(me.role)) usersBtn.hidden = false;
+      } catch (_) {}
     }
+  }
+
+  function sinAcceso(plats) {
+    const dest = { inbox: ['Conversaciones', 'https://whatsapp.neboaiconsulting.com'], cobranzas: ['Panel de cobranzas', 'https://panelcobranzas.neboaiconsulting.com'] };
+    const links = (plats || []).filter(p => dest[p]).map(p => `<a class="noacc__link" href="${dest[p][1]}">${dest[p][0]} →</a>`).join('');
+    document.body.innerHTML = `<div class="noacc"><div class="noacc__ic">🔒</div><h1>Sin acceso a Cotizaciones</h1><p>Tu usuario no tiene permiso para esta plataforma. Pídeselo a un administrador.</p>${links ? '<div class="noacc__links">' + links + '</div>' : ''}<button class="noacc__out" onclick="window.Auth&&Auth.signOut()">Cerrar sesión</button></div>`;
   }
 
   function render() {

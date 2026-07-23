@@ -300,3 +300,17 @@ table.msgs { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 .tip__r { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
 .tip__r i { width: 8px; height: 8px; border-radius: 2px; display: inline-block; margin-right: 6px; }
 .tip__r b { font-variant-numeric: tabular-nums; }
+
+/* ===== sin acceso a la plataforma ===== */
+.noacc { max-width: 420px; margin: 12vh auto; padding: 40px 28px; text-align: center; color: var(--text-primary); }
+.noacc__ic { font-size: 46px; margin-bottom: 14px; }
+.noacc h1 { font-size: 22px; font-weight: 800; margin-bottom: 10px; }
+.noacc p { color: var(--text-secondary); font-size: 14.5px; line-height: 1.5; }
+.noacc__links { display: flex; flex-direction: column; gap: 10px; margin: 22px 0; }
+.noacc__link { padding: 12px; border: 1px solid var(--border); border-radius: 10px; text-decoration: none; color: var(--sent); font-weight: 600; }
+.noacc__out { margin-top: 8px; padding: 10px 20px; border: 1px solid var(--border); border-radius: 10px; color: var(--text-secondary); font-weight: 600; cursor: pointer; background: none; }
+.plats { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 5px; }
+.plat { display: inline-flex; align-items: center; gap: 6px; padding: 6px 11px; border: 1px solid var(--border); border-radius: 9px; font-size: 13px; cursor: pointer; }
+.plat--on { border-color: var(--sent); color: var(--sent); font-weight: 600; }
+.plat--lock { opacity: .6; cursor: default; }
+.plats__nota { font-size: 12px; color: var(--text-muted); margin-top: 6px; }
