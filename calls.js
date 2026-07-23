@@ -101,7 +101,7 @@ router.post('/calls/hook', requireApiKey, wrap(async (req, res) => {
     const upd = await q(
       `INSERT INTO calls (agent, phone, transcript, recording_url, duration_secs, cost, external_id, meta, created_at)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8, COALESCE($9, now()))
-       ON CONFLICT (external_id) DO UPDATE SET
+       ON CONFLICT (external_id) WHERE external_id IS NOT NULL DO UPDATE SET
          agent = COALESCE(EXCLUDED.agent, calls.agent),
          phone = COALESCE(EXCLUDED.phone, calls.phone),
          transcript = COALESCE(EXCLUDED.transcript, calls.transcript),
