@@ -56,6 +56,12 @@ app.get('/api/health', (_req, res) => res.json({ ok: true }));
 app.get('/api/auth/config', (_req, res) => res.json({ supabaseUrl: SB_URL, supabaseAnonKey: SB_ANON, configured: authCfg }));
 app.use('/api/auth', require('./authUsers')); // /api/auth/me, /users (solo admin/super_admin)
 
+// Proxy de grabaciones: va ABIERTO (antes del gate) porque el <audio> no puede
+// mandar el token de sesión. Se protege con allowlist de hosts (evita SSRF).
+// El origen (swordaisolutions.com) no manda CORS/Content-Length, así que sin
+// esto el reproductor embebido falla; aquí lo re-servimos desde el mismo origen.
+app.get('/api/recordings/proxy', require('./services/recordingProxy').handle);
+
 // ── Gate de plataforma: todo lo demás exige acceso a 'cotizaciones' ──────────
 // Se eximen los webhooks de n8n (llevan su propia API key) y health.
 const { requirePlatform } = require('./analyticsAuth');

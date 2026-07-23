@@ -17,6 +17,8 @@
   const details = new Map();    // id -> detalle (transcripción completa)
 
   const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  // Enruta la grabación por el proxy del panel (mismo origen → sin problemas de CORS).
+  const proxyRec = u => u ? '/api/recordings/proxy?url=' + encodeURIComponent(u) : '';
   const fmtNum = n => (Number(n) || 0).toLocaleString('es-DO');
   function fmtMoney(v) {
     if (v == null) return '—';
@@ -72,9 +74,11 @@
     if (!d) return `<tr class="quo__detail"><td colspan="7"><div class="quo__loading">Cargando transcripción…</div></td></tr>`;
     if (d.error) return `<tr class="quo__detail"><td colspan="7"><div class="quo__err">Error: ${esc(d.error)}</div></td></tr>`;
 
+    // La grabación va por el proxy del propio panel: el host de origen no manda
+    // CORS y el <audio> falla (0:00 / no suena) si se apunta directo.
     const rec = d.recordingUrl
       ? `<div class="call__rec">
-           <audio controls preload="none" src="${esc(d.recordingUrl)}"></audio>
+           <audio controls preload="none" src="${esc(proxyRec(d.recordingUrl))}"></audio>
            <a class="q__btn q__btn--dl" href="${esc(d.recordingUrl)}" target="_blank" rel="noopener">↗ Abrir grabación</a>
          </div>`
       : `<div class="dim">Sin grabación.</div>`;
