@@ -288,6 +288,7 @@
     if (window.Pipeline) Pipeline.init();
     if (window.Quotes) Quotes.init({ rangeParams, authHeaders });
     if (window.Calls) Calls.init({ rangeParams, authHeaders });
+    if (window.Settings) Settings.init({ authHeaders });
     $('#rangeSeg').addEventListener('click', e => {
       const b = e.target.closest('.seg'); if (!b) return;
       $('#rangeSeg').querySelectorAll('.seg').forEach(x => x.classList.remove('seg--active'));
@@ -332,10 +333,12 @@
       $('#tabCotizaciones').hidden = t !== 'cotizaciones';
       $('#tabLlamadas').hidden = t !== 'llamadas';
       $('#tabRegistros').hidden = t !== 'registros';
+      $('#tabAjustes').hidden = t !== 'ajustes';
       if (t === 'registros') { logsPage = 1; loadLogs(); }
       if (t === 'pipeline' && window.Pipeline) Pipeline.load();
       if (t === 'cotizaciones' && window.Quotes) Quotes.load();
       if (t === 'llamadas' && window.Calls) Calls.load();
+      if (t === 'ajustes' && window.Settings) Settings.load();
     });
     $('#logsPager').addEventListener('click', e => {
       const b = e.target.closest('.pgbtn'); if (!b || b.disabled) return;
