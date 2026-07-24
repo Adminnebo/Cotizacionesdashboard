@@ -251,6 +251,23 @@ table.msgs { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 .quo__lines tbody tr:last-child td { border-bottom: none; }
 .quo__lines tfoot td { border-top: 2px solid var(--border); border-bottom: none; padding-top: 9px; }
 
+/* ===== Ajustes: agente de llamadas ===== */
+.ag__now { display: flex; flex-wrap: wrap; gap: 28px; padding: 14px 16px; margin-bottom: 18px;
+  background: var(--surface-0); border: 1px solid var(--border); border-radius: 12px; }
+.ag__now-lbl { font-size: 11.5px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: .03em; }
+.ag__now-val { font-size: 15px; font-weight: 600; margin-top: 3px; }
+.ag__field { margin-bottom: 14px; max-width: 460px; }
+.ag__field label { display: block; font-size: 12px; font-weight: 600; color: var(--text-muted); margin-bottom: 5px; }
+.ag__field select { width: 100%; }
+.ag__actions { display: flex; align-items: center; gap: 12px; }
+.ag__save { font-weight: 600; }
+.ag__save:disabled { opacity: .55; cursor: not-allowed; }
+.ag__msg { font-size: 13px; }
+.ag__msg--ok { color: var(--good); }
+.ag__msg--err { color: var(--bad, #ef4444); }
+.ag__err { padding: 14px 16px; border-radius: 12px; border: 1px solid var(--border);
+  background: var(--surface-0); color: var(--bad, #ef4444); font-size: 13.5px; }
+
 /* ===== Modal de oportunidad (título, canal, fecha, PDF preview) ===== */
 .modal { position: fixed; inset: 0; z-index: 60; background: rgba(0,0,0,.5); display: flex; align-items: flex-start; justify-content: center; padding: 32px 16px; overflow-y: auto; }
 .modal[hidden] { display: none; }

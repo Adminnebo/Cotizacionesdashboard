@@ -74,6 +74,7 @@ app.use('/api', (req, res, next) => {
 app.use('/api', require('./pipeline'));       // pipeline/oportunidades + webhook n8n
 app.use('/api', require('./quotes'));         // cotizaciones (MSSQL) + PDF (Supabase)
 app.use('/api', require('./calls'));          // llamadas del agente de voz + webhook n8n
+app.use('/api', require('./agents'));         // ajustes: qué agente atiende las llamadas
 
 // Vigilancia de la secuencia de cotizaciones: avisa a un webhook si hay huecos.
 const quoteGaps = require('./quoteGaps');

@@ -45,6 +45,7 @@
     <button class="tab" data-tab="cotizaciones" role="tab">📄 Cotizaciones</button>
     <button class="tab" data-tab="llamadas" role="tab">📞 Llamadas</button>
     <button class="tab" data-tab="registros" role="tab">📋 Registros</button>
+    <button class="tab" data-tab="ajustes" role="tab">⚙️ Ajustes</button>
   </nav>
 
   <main class="wrap" id="main">
@@ -221,6 +222,18 @@
         <p class="card__note">Quién apagó el bot, cerró o eliminó una conversación desde la interfaz, con fecha, hora y contacto.</p>
       </section>
     </div>
+
+    <!-- Pestaña: Ajustes (por ahora: qué agente atiende las llamadas) -->
+    <div class="tabpanel" id="tabAjustes" hidden>
+      <section class="card card--wide">
+        <div class="card__head">
+          <h2>Agente de llamadas</h2>
+          <button class="icon-btn" id="agRefresh" title="Actualizar">↻</button>
+        </div>
+        <div id="agBox"><p class="muted">Cargando…</p></div>
+        <p class="card__note">Elige qué agente de voz atiende las llamadas entrantes del número. El cambio se aplica de inmediato y queda registrado en Registros.</p>
+      </section>
+    </div>
   </main>
 
   <div id="tip" class="tip" hidden></div>
@@ -252,6 +265,7 @@
   <script src="js/pipeline.js"></script>
   <script src="js/quotes.js"></script>
   <script src="js/calls.js"></script>
+  <script src="js/settings.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>
