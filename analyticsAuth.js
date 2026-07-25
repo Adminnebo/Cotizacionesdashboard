@@ -5,21 +5,19 @@
    SUPABASE_SERVICE_ROLE_KEY.
    ========================================================= */
 'use strict';
+const { PLATAFORMAS, permisosDe, plataformasDe: platsDe, puede } = require('./permcatalog');
 const URL = process.env.SUPABASE_URL || '';
 const ANON = process.env.SUPABASE_ANON_KEY || '';
 const SERVICE = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 const configured = !!(URL && ANON && SERVICE);
 
-const PLATAFORMAS = ['inbox', 'cotizaciones', 'cobranzas'];
-function plataformasDe(role, platforms) {
-  if (role === 'super_admin' || role === 'admin') return PLATAFORMAS.slice();
-  return Array.isArray(platforms) ? platforms : PLATAFORMAS.slice();  // agente; null (pre-migración) = todas
-}
+// Firma vieja (role, platforms) por compatibilidad con quien la importe.
+function plataformasDe(role, platforms) { return platsDe({ role, platforms }); }
 
 const cache = new Map();            // token -> { info, exp }
 const TTL = 60 * 1000;
 
-// Devuelve { id, email, role, platforms } o null.
+// Devuelve { id, email, role, platforms, permissions } o null.
 async function userForToken(token) {
   if (!token || !configured) return null;
   const hit = cache.get(token);
@@ -30,11 +28,14 @@ async function userForToken(token) {
     const u = await ures.json();
     const id = u && u.id;
     if (!id) return null;
-    const pres = await fetch(URL + '/rest/v1/profiles?id=eq.' + id + '&select=role,platforms',
+    const pres = await fetch(URL + '/rest/v1/profiles?id=eq.' + id + '&select=role,platforms,permissions',
       { headers: { apikey: SERVICE, Authorization: 'Bearer ' + SERVICE } });
     const rows = pres.ok ? await pres.json() : [];
     const p = rows[0] || {};
-    const info = { id, email: u.email || null, role: p.role || null, platforms: plataformasDe(p.role, p.platforms) };
+    const info = {
+      id, email: u.email || null, role: p.role || null,
+      platforms: platsDe(p), permissions: permisosDe(p)
+    };
     cache.set(token, { info, exp: Date.now() + TTL });
     return info;
   } catch (_) { return null; }
@@ -49,6 +50,7 @@ async function optionalAuth(req, _res, next) {
   const u = await userForToken(tokenDe(req));
   req.role = u ? u.role : null;
   req.platforms = u ? u.platforms : null;
+  req.permissions = u ? u.permissions : null;
   next();
 }
 
@@ -59,10 +61,24 @@ function requirePlatform(key) {
     if (!configured) return next();
     const u = await userForToken(tokenDe(req));
     if (!u) return res.status(401).json({ error: 'No autenticado' });
-    req.role = u.role; req.platforms = u.platforms; req.userId = u.id;
+    req.role = u.role; req.platforms = u.platforms; req.permissions = u.permissions; req.userId = u.id;
     if (!u.platforms.includes(key)) return res.status(403).json({ error: 'Sin acceso a esta plataforma', platform: key });
     next();
   };
 }
 
-module.exports = { configured, optionalAuth, requirePlatform, roleForToken, userForToken, plataformasDe, PLATAFORMAS, URL, ANON, SERVICE };
+// Exige un permiso granular concreto (p.ej. 'cotizaciones.registros').
+function requirePermission(key) {
+  return async (req, res, next) => {
+    if (!configured) return next();
+    const u = await userForToken(tokenDe(req));
+    if (!u) return res.status(401).json({ error: 'No autenticado' });
+    req.role = u.role; req.platforms = u.platforms; req.permissions = u.permissions; req.userId = u.id;
+    if (!puede({ role: u.role, permissions: u.permissions }, key)) {
+      return res.status(403).json({ error: 'Sin permiso para esta acción', permission: key });
+    }
+    next();
+  };
+}
+
+module.exports = { configured, optionalAuth, requirePlatform, requirePermission, roleForToken, userForToken, plataformasDe, PLATAFORMAS, URL, ANON, SERVICE };

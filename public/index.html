@@ -39,13 +39,13 @@
   </header>
 
   <nav class="tabs" id="tabs" role="tablist" aria-label="Vistas">
-    <button class="tab tab--active" data-tab="resumen" role="tab">📈 Resumen</button>
-    <button class="tab" data-tab="mensajes" role="tab">💬 Mensajes</button>
-    <button class="tab" data-tab="pipeline" role="tab">🗂️ Pipeline</button>
-    <button class="tab" data-tab="cotizaciones" role="tab">📄 Cotizaciones</button>
-    <button class="tab" data-tab="llamadas" role="tab">📞 Llamadas</button>
-    <button class="tab" data-tab="registros" role="tab">📋 Registros</button>
-    <button class="tab" data-tab="ajustes" role="tab">⚙️ Ajustes</button>
+    <button class="tab tab--active" data-tab="resumen" role="tab" data-perm="cotizaciones.resumen">📈 Resumen</button>
+    <button class="tab" data-tab="mensajes" role="tab" data-perm="cotizaciones.mensajes">💬 Mensajes</button>
+    <button class="tab" data-tab="pipeline" role="tab" data-perm="cotizaciones.pipeline">🗂️ Pipeline</button>
+    <button class="tab" data-tab="cotizaciones" role="tab" data-perm="cotizaciones.cotizaciones">📄 Cotizaciones</button>
+    <button class="tab" data-tab="llamadas" role="tab" data-perm="cotizaciones.llamadas">📞 Llamadas</button>
+    <button class="tab" data-tab="registros" role="tab" data-perm="cotizaciones.registros">📋 Registros</button>
+    <button class="tab" data-tab="ajustes" role="tab" data-perm="cotizaciones.agentes">⚙️ Ajustes</button>
   </nav>
 
   <main class="wrap" id="main">
@@ -260,6 +260,7 @@
     </div>
   </div>
 
+  <script src="js/permcatalog.js"></script>
   <script src="js/auth.js"></script>
   <script src="js/charts.js"></script>
   <script src="js/pipeline.js"></script>

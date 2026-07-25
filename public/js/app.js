@@ -86,6 +86,16 @@
         const plats = me.platforms || [];
         if (Array.isArray(plats) && plats.length && !plats.includes('cotizaciones')) return sinAcceso(plats);
         if (usersBtn && ['admin', 'super_admin'].includes(me.role)) usersBtn.hidden = false;
+        // Permisos granulares: oculta las pestañas que el agente no tiene y, si la
+        // activa quedó oculta, salta a la primera visible.
+        if (window.PERMS) {
+          PERMS.set(me.permissions); PERMS.aplicar();
+          const activa = document.querySelector('.tab.tab--active');
+          if (activa && activa.hidden) {
+            const primera = document.querySelector('.tab:not([hidden])');
+            if (primera) primera.click();
+          }
+        }
       } catch (_) {}
     }
   }

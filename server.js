@@ -10,6 +10,10 @@ const { q } = require('./db');
 const { quotesStat } = require('./mssql');
 const { rangeOf } = require('./range');
 const { configured: authCfg, optionalAuth, URL: SB_URL, ANON: SB_ANON } = require('./analyticsAuth');
+const { puede: puedePerm } = require('./permcatalog');
+// ¿este request puede ver costos de IA? admin/super_admin sí; a un agente se le
+// concede con el permiso 'cotizaciones.costos'. Sin auth (dev) = sí.
+const puedeVerCostos = req => !authCfg || puedePerm({ role: req.role, permissions: req.permissions }, 'cotizaciones.costos');
 
 const app = express();
 
@@ -64,11 +68,32 @@ app.get('/api/recordings/proxy', require('./services/recordingProxy').handle);
 
 // ── Gate de plataforma: todo lo demás exige acceso a 'cotizaciones' ──────────
 // Se eximen los webhooks de n8n (llevan su propia API key) y health.
-const { requirePlatform } = require('./analyticsAuth');
+const { requirePlatform, requirePermission } = require('./analyticsAuth');
 const ABIERTAS = [/^\/hooks\//, /^\/calls\/hook$/, /^\/health$/];
+
+// Mapa ruta → permiso granular (rutas relativas a /api). El primero que casa
+// manda. Lo que no case aquí solo exige la plataforma 'cotizaciones'.
+const PERM_RUTAS = [
+  { m: 'GET',   re: /^\/stats$/,                    perm: 'cotizaciones.resumen' },
+  { m: 'GET',   re: /^\/quotes\/gaps$/,             perm: 'cotizaciones.resumen' },
+  { m: 'GET',   re: /^\/messages$/,                 perm: 'cotizaciones.mensajes' },
+  { m: 'GET',   re: /^\/logs$/,                     perm: 'cotizaciones.registros' },
+  { m: 'GET',   re: /^\/pipelines$/,                perm: 'cotizaciones.pipeline' },
+  { m: 'PATCH', re: /^\/opportunities\/[^/]+$/,     perm: 'cotizaciones.pipeline_edit' },
+  { m: 'GET',   re: /^\/opportunities(\/.*)?$/,     perm: 'cotizaciones.pipeline' },
+  { m: 'GET',   re: /^\/quotes(\/(?!gaps).*)?$/,    perm: 'cotizaciones.cotizaciones' },
+  { m: 'GET',   re: /^\/calls(\/.*)?$/,             perm: 'cotizaciones.llamadas' },
+  { m: 'GET',   re: /^\/agents$/,                   perm: 'cotizaciones.agentes' },
+  { m: 'POST',  re: /^\/agents\/select$/,           perm: 'cotizaciones.agentes' }
+];
+
 app.use('/api', (req, res, next) => {
   if (ABIERTAS.some(re => re.test(req.path))) return next();
-  requirePlatform('cotizaciones')(req, res, next);
+  requirePlatform('cotizaciones')(req, res, () => {
+    const hit = PERM_RUTAS.find(r => r.m === req.method && r.re.test(req.path));
+    if (!hit) return next();
+    requirePermission(hit.perm)(req, res, next);
+  });
 });
 
 app.use('/api', require('./pipeline'));       // pipeline/oportunidades + webhook n8n
@@ -84,7 +109,7 @@ app.get('/api/quotes/gaps', optionalAuth, wrap(async (_req, res) => {
 
 app.get('/api/stats', optionalAuth, wrap(async (req, res) => {
   const { from, to } = rangeOf(req);
-  const canSeeCost = !authCfg || req.role === 'super_admin'; // costes reales solo super_admin
+  const canSeeCost = puedeVerCostos(req); // costos: admin o permiso 'cotizaciones.costos'
 
   const [kpi, rt, byDay, byHour, byType, execT, aiRows, quotes] = await Promise.all([
     q(`SELECT count(*) FILTER (WHERE direction='out') AS sent,
@@ -177,7 +202,7 @@ app.get('/api/stats', optionalAuth, wrap(async (req, res) => {
 const trunc = (t, n) => (t && t.length > n ? t.slice(0, n) + '…' : (t || ''));
 app.get('/api/messages', optionalAuth, wrap(async (req, res) => {
   const { from, to } = rangeOf(req);
-  const canSeeCost = !authCfg || req.role === 'super_admin';
+  const canSeeCost = puedeVerCostos(req);
 
   const limit = Math.min(200, Math.max(10, Number(req.query.limit) || 50));
   const page = Math.max(1, Number(req.query.page) || 1);
