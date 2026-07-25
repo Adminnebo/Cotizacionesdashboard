@@ -86,9 +86,18 @@
       ? `<div class="call__transcript">${esc(d.transcript)}</div>`
       : `<div class="dim">Sin transcripción.</div>`;
 
+    // Detalle de coste: solo llega en la respuesta si el usuario es super_admin.
+    const costDet = d.costDetail
+      ? `<div class="call__costdet">
+           <div class="call__costdet-lbl">💲 Detalle de coste <span class="call__costdet-tag">solo super admin</span></div>
+           <div class="call__costdet-txt">${esc(d.costDetail)}</div>
+         </div>`
+      : '';
+
     return `<tr class="quo__detail"><td colspan="7">
       <div class="quo__panel">
         ${rec}
+        ${costDet}
         <div class="call__transcript-lbl">Transcripción</div>
         ${tr}
       </div>

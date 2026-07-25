@@ -227,6 +227,11 @@ table.msgs { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 .call__rec audio { height: 34px; max-width: 340px; }
 .call__transcript-lbl { font-size: 11.5px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: .03em; margin-bottom: 6px; }
 .call__transcript { font-size: 13px; line-height: 1.55; color: var(--text-secondary); white-space: pre-wrap; max-height: 340px; overflow-y: auto; background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
+/* Detalle de coste (texto): solo lo recibe el super_admin desde el backend. */
+.call__costdet { margin-bottom: 14px; background: rgba(234,179,8,.08); border: 1px solid rgba(234,179,8,.35); border-radius: 10px; padding: 12px 14px; }
+.call__costdet-lbl { font-size: 11.5px; font-weight: 700; color: #b7860b; text-transform: uppercase; letter-spacing: .03em; margin-bottom: 6px; display: flex; align-items: center; gap: 8px; }
+.call__costdet-tag { font-size: 9.5px; font-weight: 800; color: #fff; background: #d9a400; padding: 1px 6px; border-radius: 5px; letter-spacing: .02em; text-transform: none; }
+.call__costdet-txt { font-size: 13px; line-height: 1.55; color: var(--text-secondary); white-space: pre-wrap; }
 
 /* fila desplegable con los productos */
 .quotes .quo__exp { width: 30px; text-align: center; }

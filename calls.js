@@ -8,9 +8,13 @@
 'use strict';
 const express = require('express');
 const { q } = require('./db');
-const { optionalAuth } = require('./analyticsAuth');
+const { optionalAuth, configured: authCfg } = require('./analyticsAuth');
 const { rangeOf } = require('./range');
 const router = express.Router();
+
+// El detalle de coste (texto libre) es SOLO para super_admin. Sin auth (dev) se
+// muestra para no estorbar el desarrollo local.
+const esSuper = req => !authCfg || req.role === 'super_admin';
 
 const wrap = fn => (req, res) => Promise.resolve(fn(req, res)).catch(e => { console.error(req.path, e.message); res.status(500).json({ error: e.message }); });
 const COST_CCY = process.env.CALL_COST_CURRENCY || 'USD';
@@ -32,6 +36,8 @@ function ensureSchema() {
       meta JSONB,
       created_at TIMESTAMPTZ NOT NULL DEFAULT now()
     )`);
+    // Detalle de coste en texto libre (desglose), visible solo para super_admin.
+    await q(`ALTER TABLE calls ADD COLUMN IF NOT EXISTS cost_detail TEXT`);
     await q(`CREATE UNIQUE INDEX IF NOT EXISTS calls_external_id_uq ON calls(external_id) WHERE external_id IS NOT NULL`);
     await q(`CREATE INDEX IF NOT EXISTS calls_created_idx ON calls(created_at)`);
   })().catch(e => { schemaReady = null; throw e; });
@@ -66,7 +72,8 @@ function requireApiKey(req, res, next) {
   next();
 }
 
-const shapeCall = (c, { full = false } = {}) => ({
+// `super` decide si se incluye el detalle de coste (texto solo super_admin).
+const shapeCall = (c, { full = false, super: canSuper = false } = {}) => ({
   id: String(c.id),
   agent: c.agent || null,
   phone: c.phone || null,
@@ -76,6 +83,8 @@ const shapeCall = (c, { full = false } = {}) => ({
   recordingUrl: c.recording_url || null,
   durationSecs: c.duration_secs != null ? Number(c.duration_secs) : null,
   cost: c.cost != null ? Number(c.cost) : null,
+  // Solo el super_admin lo recibe; para el resto ni siquiera viaja el campo.
+  costDetail: canSuper ? (c.cost_detail || null) : undefined,
   externalId: c.external_id || null,
   at: c.created_at
 });
@@ -93,14 +102,17 @@ router.post('/calls/hook', requireApiKey, wrap(async (req, res) => {
   const recordingUrl = b.recordingUrl || b.recording || b.grabacion || null;
   const durationSecs = parseDuration(b.durationSecs != null ? b.durationSecs : (b.duration != null ? b.duration : b.duracion));
   const cost = parseCost(b.cost != null ? b.cost : b.coste);
+  // Detalle de coste (texto libre): desglose que solo verá el super_admin.
+  const costDetailRaw = b.costDetail ?? b.costeDetalle ?? b.detalleCoste ?? b.detalle_coste ?? b.costDetalle ?? null;
+  const costDetail = costDetailRaw != null && String(costDetailRaw).trim() !== '' ? String(costDetailRaw) : null;
   const ext = b.externalId != null ? String(b.externalId) : null;
   const at = b.at ? new Date(b.at) : null;
   const meta = b.meta != null ? JSON.stringify(b.meta) : null;
 
   if (ext) {
     const upd = await q(
-      `INSERT INTO calls (agent, phone, transcript, recording_url, duration_secs, cost, external_id, meta, created_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8, COALESCE($9, now()))
+      `INSERT INTO calls (agent, phone, transcript, recording_url, duration_secs, cost, cost_detail, external_id, meta, created_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9, COALESCE($10, now()))
        ON CONFLICT (external_id) WHERE external_id IS NOT NULL DO UPDATE SET
          agent = COALESCE(EXCLUDED.agent, calls.agent),
          phone = COALESCE(EXCLUDED.phone, calls.phone),
@@ -108,19 +120,21 @@ router.post('/calls/hook', requireApiKey, wrap(async (req, res) => {
          recording_url = COALESCE(EXCLUDED.recording_url, calls.recording_url),
          duration_secs = COALESCE(EXCLUDED.duration_secs, calls.duration_secs),
          cost = COALESCE(EXCLUDED.cost, calls.cost),
+         cost_detail = COALESCE(EXCLUDED.cost_detail, calls.cost_detail),
          meta = COALESCE(EXCLUDED.meta, calls.meta)
        RETURNING *`,
-      [agent, phone, transcript, recordingUrl ? String(recordingUrl) : null, durationSecs, cost, ext, meta, at]
+      [agent, phone, transcript, recordingUrl ? String(recordingUrl) : null, durationSecs, cost, costDetail, ext, meta, at]
     );
-    return res.json({ ok: true, call: shapeCall(upd.rows[0], { full: true }) });
+    // El emisor es n8n (API key), le devolvemos el registro completo.
+    return res.json({ ok: true, call: shapeCall(upd.rows[0], { full: true, super: true }) });
   }
 
   const ins = await q(
-    `INSERT INTO calls (agent, phone, transcript, recording_url, duration_secs, cost, meta, created_at)
-     VALUES ($1,$2,$3,$4,$5,$6,$7, COALESCE($8, now())) RETURNING *`,
-    [agent, phone, transcript, recordingUrl ? String(recordingUrl) : null, durationSecs, cost, meta, at]
+    `INSERT INTO calls (agent, phone, transcript, recording_url, duration_secs, cost, cost_detail, meta, created_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8, COALESCE($9, now())) RETURNING *`,
+    [agent, phone, transcript, recordingUrl ? String(recordingUrl) : null, durationSecs, cost, costDetail, meta, at]
   );
-  res.status(201).json({ ok: true, call: shapeCall(ins.rows[0], { full: true }) });
+  res.status(201).json({ ok: true, call: shapeCall(ins.rows[0], { full: true, super: true }) });
 }));
 
 // ---------- Lectura: listado + recap del rango ----------
@@ -140,7 +154,7 @@ router.get('/calls', optionalAuth, wrap(async (req, res) => {
   if (agent) { params.push(agent); where += ` AND agent = $${params.length}`; }
 
   const [rows, agg, byAgent] = await Promise.all([
-    q(`SELECT id, agent, phone, transcript, recording_url, duration_secs, cost, external_id, created_at
+    q(`SELECT id, agent, phone, transcript, recording_url, duration_secs, cost, cost_detail, external_id, created_at
        FROM calls WHERE ${where} ORDER BY created_at DESC, id DESC LIMIT ${limit} OFFSET ${offset}`, params),
     q(`SELECT count(*)::int AS calls, COALESCE(SUM(cost),0) AS cost,
               COALESCE(SUM(duration_secs),0)::bigint AS dur
@@ -167,7 +181,7 @@ router.get('/calls', optionalAuth, wrap(async (req, res) => {
       avgCost: calls ? totalCost / calls : 0,
       agents: byAgent.rows.map(r => ({ agent: r.agent, calls: num(r.calls), cost: num(r.cost), durationSecs: num(r.dur) }))
     },
-    items: rows.rows.map(c => shapeCall(c))
+    items: rows.rows.map(c => shapeCall(c, { super: esSuper(req) }))
   });
 }));
 
@@ -177,7 +191,7 @@ router.get('/calls/:id', optionalAuth, wrap(async (req, res) => {
   await ensureSchema();
   const r = await q(`SELECT * FROM calls WHERE id=$1`, [Number(req.params.id)]);
   if (!r.rows[0]) return res.status(404).json({ error: 'Llamada no encontrada' });
-  res.json({ call: shapeCall(r.rows[0], { full: true }) });
+  res.json({ call: shapeCall(r.rows[0], { full: true, super: esSuper(req) }) });
 }));
 
 module.exports = router;
