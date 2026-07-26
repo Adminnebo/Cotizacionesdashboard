@@ -15,6 +15,24 @@ function limpiarPlataformas(v){ if(!Array.isArray(v)) return null; return [...ne
 const platsDePermisos = perms => [...new Set(perms.map(k => k.split('.')[0]))];
 
 const svc = (extra) => Object.assign({ apikey: SERVICE, Authorization: 'Bearer ' + SERVICE, 'Content-Type': 'application/json' }, extra || {});
+
+// Escribe en profiles tolerando esquemas viejos: si PostgREST aún no conoce la
+// columna 'permissions' (o 'platforms'), reintenta sin ella para no romper el
+// resto del cambio (rol, contraseña…). Devuelve un texto de error o null.
+async function escribirPerfil(method, id, obj) {
+  const url = method === 'POST' ? URL + '/rest/v1/profiles' : URL + '/rest/v1/profiles?id=eq.' + id;
+  const prefer = method === 'POST' ? 'resolution=merge-duplicates,return=minimal' : 'return=minimal';
+  const intentar = async payload => {
+    const r = await fetch(url, { method, headers: svc({ Prefer: prefer }), body: JSON.stringify(payload) });
+    if (r.ok) return null;
+    return (await r.text().catch(() => '')) || ('HTTP ' + r.status);
+  };
+  let err = await intentar(obj);
+  for (const col of ['permissions', 'platforms']) {
+    if (err && (col in obj) && err.includes(`'${col}'`)) { delete obj[col]; err = await intentar(obj); }
+  }
+  return err;
+}
 async function tokenRole(req) {
   const h = req.headers.authorization || '';
   const t = h.startsWith('Bearer ') ? h.slice(7) : '';
@@ -62,7 +80,8 @@ router.post('/users', requireAdmin, async (req, res) => {
   const perms = limpiarPermisos(b.permissions);
   if (perms) { perfil.permissions = perms; perfil.platforms = platsDePermisos(perms); }
   else { const pl = limpiarPlataformas(b.platforms); if (pl) perfil.platforms = pl; }
-  await fetch(URL + '/rest/v1/profiles', { method: 'POST', headers: svc({ Prefer: 'resolution=merge-duplicates,return=minimal' }), body: JSON.stringify(perfil) });
+  const perr = await escribirPerfil('POST', null, perfil);
+  if (perr) return res.status(500).json({ error: 'usuario creado pero falló el perfil: ' + perr });
   res.status(201).json({ ok: true, id: cj.id });
 });
 
@@ -81,7 +100,8 @@ router.patch('/users/:id', requireAdmin, async (req, res) => {
     if (!r.ok) { const e = await r.json().catch(() => ({})); return res.status(400).json({ error: e.msg || e.error_description || ('update ' + r.status) }); }
   }
   if (Object.keys(patch).length) {
-    await fetch(URL + '/rest/v1/profiles?id=eq.' + req.params.id, { method: 'PATCH', headers: svc({ Prefer: 'return=minimal' }), body: JSON.stringify(patch) });
+    const perr = await escribirPerfil('PATCH', req.params.id, patch);
+    if (perr) return res.status(400).json({ error: perr });
   }
   res.json({ ok: true });
 });
