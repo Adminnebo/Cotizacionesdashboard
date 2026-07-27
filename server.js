@@ -14,6 +14,9 @@ const { puede: puedePerm } = require('./permcatalog');
 // ¿este request puede ver costos de IA? admin/super_admin sí; a un agente se le
 // concede con el permiso 'cotizaciones.costos'. Sin auth (dev) = sí.
 const puedeVerCostos = req => !authCfg || puedePerm({ role: req.role, permissions: req.permissions }, 'cotizaciones.costos');
+// El % de ganancia/pérdida por mensaje es SOLO para super_admin (más estricto que
+// "ver costos"). Sin auth (dev) se muestra para no estorbar en local.
+const esSuper = req => !authCfg || req.role === 'super_admin';
 
 const app = express();
 
@@ -203,6 +206,7 @@ const trunc = (t, n) => (t && t.length > n ? t.slice(0, n) + '…' : (t || ''));
 app.get('/api/messages', optionalAuth, wrap(async (req, res) => {
   const { from, to } = rangeOf(req);
   const canSeeCost = puedeVerCostos(req);
+  const canSeeMargin = esSuper(req);   // % ganancia/pérdida: solo super_admin
 
   const limit = Math.min(200, Math.max(10, Number(req.query.limit) || 50));
   const page = Math.max(1, Number(req.query.page) || 1);
@@ -263,28 +267,38 @@ app.get('/api/messages', optionalAuth, wrap(async (req, res) => {
 
   const total = totalR.rows[0] ? totalR.rows[0].n : 0;
   res.json({
-    page, limit, total, canSeeCost,
+    page, limit, total, canSeeCost, canSeeMargin,
     cost: { out: MSG_COST_OUT, in: MSG_COST_IN, currency: COST_CCY },
-    items: rows.rows.map(m => ({
-      id: String(m.id),
-      conversationId: String(m.conversation_id),
-      phone: m.phone || null,
-      name: m.name || null,
-      inText: trunc(m.in_text, 240),
-      inType: m.in_type || 'text',
-      inAt: m.in_at,
-      outText: trunc(m.out_text, 240),
-      outType: m.out_type || 'text',
-      outAt: m.out_at,
-      status: m.status || '',
-      responseSecs: m.response_secs != null ? Number(m.response_secs) : null,
-      execSecs: m.execution_ms != null ? Number(m.execution_ms) : null,
-      model: m.model || null,
-      sentBy: m.sent_by || null,
-      channel: m.channel || 'whatsapp',
-      costUsd: (canSeeCost && m.cost_usd != null) ? Number(m.cost_usd) : null,
-      cost: m.charged_usd != null ? Number(m.charged_usd) : MSG_COST_OUT
-    }))
+    items: rows.rows.map(m => {
+      // Lo cobrado al cliente vs. lo que nos costó (IA). Ganancia = cobrado - coste.
+      const charged = m.charged_usd != null ? Number(m.charged_usd) : MSG_COST_OUT;
+      const ourCost = m.cost_usd != null ? Number(m.cost_usd) : null;
+      // % sobre el coste: +40% gana, -15% pierde. Sin coste (>0) no es calculable.
+      let marginPct = null;
+      if (canSeeMargin && ourCost != null && ourCost > 0) marginPct = ((charged - ourCost) / ourCost) * 100;
+      return {
+        id: String(m.id),
+        conversationId: String(m.conversation_id),
+        phone: m.phone || null,
+        name: m.name || null,
+        inText: trunc(m.in_text, 240),
+        inType: m.in_type || 'text',
+        inAt: m.in_at,
+        outText: trunc(m.out_text, 240),
+        outType: m.out_type || 'text',
+        outAt: m.out_at,
+        status: m.status || '',
+        responseSecs: m.response_secs != null ? Number(m.response_secs) : null,
+        execSecs: m.execution_ms != null ? Number(m.execution_ms) : null,
+        model: m.model || null,
+        sentBy: m.sent_by || null,
+        channel: m.channel || 'whatsapp',
+        costUsd: (canSeeCost && m.cost_usd != null) ? Number(m.cost_usd) : null,
+        cost: charged,
+        // Solo viaja para super_admin; para el resto el campo ni existe.
+        marginPct: canSeeMargin ? marginPct : undefined
+      };
+    })
   });
 }));
 

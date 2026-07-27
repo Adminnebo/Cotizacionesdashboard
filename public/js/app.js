@@ -182,6 +182,15 @@
     return `<span class="${bot ? 'dim' : 'msgs__human'}">${bot ? '🤖' : '👤'} ${escapeHtml(name)}</span>`;
   }
 
+  // % de ganancia/pérdida por mensaje (solo super_admin; verde gana, rojo pierde).
+  function marginCell(p) {
+    if (p == null) return '<span class="dim">—</span>';
+    const v = Number(p);
+    const cls = v >= 0 ? 'msgs__gain' : 'msgs__loss';
+    const sign = v > 0 ? '+' : '';
+    return `<span class="${cls}">${sign}${v.toFixed(0)}%</span>`;
+  }
+
   const CHANNELS = {
     whatsapp:   { label: 'WhatsApp',    icon: '💬' },
     instagram:  { label: 'Instagram',   icon: '📸' },
@@ -198,10 +207,14 @@
 
   function renderMessages() {
     const d = msgData; if (!d) return;
-    const tbl = $('#msgsTable'); if (tbl) tbl.classList.toggle('msgs--nocost', d.canSeeCost === false); // oculta col Coste IA
+    const tbl = $('#msgsTable');
+    if (tbl) {
+      tbl.classList.toggle('msgs--nocost', d.canSeeCost === false);       // oculta col Coste IA
+      tbl.classList.toggle('msgs--nomargin', d.canSeeMargin === false);   // oculta col Ganancia (no super admin)
+    }
     const body = $('#msgsBody');
     if (!d.items.length) {
-      body.innerHTML = `<tr><td colspan="11" class="msgs__empty">Sin intercambios en el rango.</td></tr>`;
+      body.innerHTML = `<tr><td colspan="12" class="msgs__empty">Sin intercambios en el rango.</td></tr>`;
     } else {
       body.innerHTML = d.items.map(m => `<tr>
         <td class="nowrap">${fmtDateTime(m.inAt || m.outAt)}</td>
@@ -214,6 +227,7 @@
         <td class="cap">${m.model ? escapeHtml(m.model) : '<span class="dim">—</span>'}</td>
         <td class="num">${m.costUsd != null ? fmtUsd(m.costUsd) : '<span class="dim">—</span>'}</td>
         <td class="num">${fmtCost(m.cost, d.cost.currency)}</td>
+        <td class="num">${marginCell(m.marginPct)}</td>
         <td class="cap dim">${escapeHtml(m.status || '—')}</td>
       </tr>`).join('');
     }
@@ -246,7 +260,7 @@
       msgData = await res.json();
       renderMessages();
     } catch (e) {
-      $('#msgsBody').innerHTML = `<tr><td colspan="11" class="msgs__empty">Error: ${escapeHtml(e.message)}</td></tr>`;
+      $('#msgsBody').innerHTML = `<tr><td colspan="12" class="msgs__empty">Error: ${escapeHtml(e.message)}</td></tr>`;
     }
   }
 
