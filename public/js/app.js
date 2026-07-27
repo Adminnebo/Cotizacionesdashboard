@@ -191,6 +191,26 @@
     return `<span class="${cls}">${sign}${v.toFixed(0)}%</span>`;
   }
 
+  // Recap de ganancia/pérdida del rango COMPLETO (no solo la página). Solo super_admin.
+  function renderMarginRecap(d) {
+    const box = $('#msgsRecap');
+    if (!box) return;
+    const r = d.marginRecap;
+    if (!r || d.canSeeMargin === false) { box.hidden = true; box.innerHTML = ''; return; }
+    const ccy = (d.cost && d.cost.currency) || 'USD';
+    const gana = (Number(r.profit) || 0) >= 0;
+    const cls = gana ? 'msgs__gain' : 'msgs__loss';
+    const pct = r.profitPct == null ? '—' : (r.profitPct > 0 ? '+' : '') + Number(r.profitPct).toFixed(0) + '%';
+    box.hidden = false;
+    box.innerHTML = `
+      <span class="msgs-recap__tag">Solo super admin</span>
+      <span class="msgs-recap__item"><b>Coste IA total</b> ${fmtUsd(r.cost)}</span>
+      <span class="msgs-recap__item"><b>Cobrado total</b> ${fmtCost(r.charged, ccy)}</span>
+      <span class="msgs-recap__item msgs-recap__net ${cls}">
+        <b>${gana ? 'Ganancia' : 'Pérdida'} del rango</b> ${fmtCost(r.profit, ccy)} <span class="msgs-recap__pct ${cls}">(${pct})</span>
+      </span>`;
+  }
+
   const CHANNELS = {
     whatsapp:   { label: 'WhatsApp',    icon: '💬' },
     instagram:  { label: 'Instagram',   icon: '📸' },
@@ -212,6 +232,7 @@
       tbl.classList.toggle('msgs--nocost', d.canSeeCost === false);       // oculta col Coste IA
       tbl.classList.toggle('msgs--nomargin', d.canSeeMargin === false);   // oculta col Ganancia (no super admin)
     }
+    renderMarginRecap(d);
     const body = $('#msgsBody');
     if (!d.items.length) {
       body.innerHTML = `<tr><td colspan="12" class="msgs__empty">Sin intercambios en el rango.</td></tr>`;

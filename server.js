@@ -232,6 +232,12 @@ app.get('/api/messages', optionalAuth, wrap(async (req, res) => {
     channelClause = ` AND s.channel = $${params.length}`;
   }
 
+  // La consulta del total lleva un parámetro extra (fallback de cobro cuando
+  // charged_usd es NULL). Va en SU PROPIO array: la de filas no lo referencia y
+  // pg rechaza parámetros de más.
+  const paramsTot = params.slice();
+  const outIdx = paramsTot.push(MSG_COST_OUT);
+
   const [rows, totalR] = await Promise.all([
     q(`WITH seq AS (
          SELECT id, conversation_id, direction, type, text, status, created_at, execution_ms, model, cost_usd, charged_usd, sent_by, channel,
@@ -252,22 +258,39 @@ app.get('/api/messages', optionalAuth, wrap(async (req, res) => {
        WHERE s.direction='out' AND s.prev_dir='in'${searchClause}${senderClause}${channelClause}
        ORDER BY s.created_at DESC, s.id DESC
        LIMIT ${limit} OFFSET ${offset}`, params),
+    // Total del rango: conteo + sumas de coste/cobro (solo filas con coste real,
+    // igual base que el % por mensaje) para el recap de ganancia del super_admin.
     q(`WITH seq AS (
-         SELECT conversation_id, direction, text, sent_by, channel,
+         SELECT conversation_id, direction, text, sent_by, channel, cost_usd, charged_usd,
                 LAG(direction) OVER w AS prev_dir,
                 LAG(text)      OVER w AS prev_text
          FROM messages WHERE created_at >= $1 AND created_at < $2
          WINDOW w AS (PARTITION BY conversation_id ORDER BY created_at, id))
-       SELECT count(*)::int AS n
+       SELECT count(*)::int AS n,
+              COALESCE(SUM(s.cost_usd) FILTER (WHERE s.cost_usd > 0), 0) AS sum_cost,
+              COALESCE(SUM(COALESCE(s.charged_usd, $${outIdx})) FILTER (WHERE s.cost_usd > 0), 0) AS sum_charged
        FROM seq s
        JOIN conversations cv ON cv.id = s.conversation_id
        JOIN contacts c ON c.id = cv.contact_id
-       WHERE s.direction='out' AND s.prev_dir='in'${searchClause}${senderClause}${channelClause}`, params)
+       WHERE s.direction='out' AND s.prev_dir='in'${searchClause}${senderClause}${channelClause}`, paramsTot)
   ]);
 
-  const total = totalR.rows[0] ? totalR.rows[0].n : 0;
+  const tr = totalR.rows[0] || {};
+  const total = tr.n || 0;
+  // Recap de ganancia/pérdida del rango completo (solo super_admin).
+  let marginRecap = null;
+  if (canSeeMargin) {
+    const sumCost = Number(tr.sum_cost) || 0;
+    const sumCharged = Number(tr.sum_charged) || 0;
+    marginRecap = {
+      cost: sumCost,
+      charged: sumCharged,
+      profit: sumCharged - sumCost,
+      profitPct: sumCost > 0 ? ((sumCharged - sumCost) / sumCost) * 100 : null
+    };
+  }
   res.json({
-    page, limit, total, canSeeCost, canSeeMargin,
+    page, limit, total, canSeeCost, canSeeMargin, marginRecap,
     cost: { out: MSG_COST_OUT, in: MSG_COST_IN, currency: COST_CCY },
     items: rows.rows.map(m => {
       // Lo cobrado al cliente vs. lo que nos costó (IA). Ganancia = cobrado - coste.
