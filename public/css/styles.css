@@ -87,6 +87,13 @@ body { font-family: Inter, system-ui, sans-serif; background: var(--surface-0); 
 .msgs-recap__net { margin-left: auto; font-size: 14px; }
 .msgs-recap__net b { color: inherit; }
 .msgs-recap__pct { font-weight: 800; }
+/* ajustes: porcentaje configurable (solo super_admin) */
+.pct__tag { font-size: 9.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .03em; color: #fff; background: #d9a400; padding: 2px 7px; border-radius: 5px; }
+.pct__row { display: flex; align-items: center; gap: 10px; margin: 4px 0 2px; }
+.pct__input { width: 120px; padding: 9px 11px; font-size: 15px; font-weight: 600; text-align: right; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-1); color: var(--text); }
+.pct__input:focus { outline: none; border-color: var(--accent, #4c8bf5); }
+.pct__sign { font-size: 15px; font-weight: 700; color: var(--text-muted); margin-left: -4px; }
+.pct__save { margin-left: 4px; }
 .msgs__human { color: var(--sent); font-weight: 600; }
 .kpi__label { font-size: 13px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: .03em; display: flex; align-items: center; justify-content: center; gap: 7px; }
 .kpi__dot { width: 9px; height: 9px; border-radius: 50%; }

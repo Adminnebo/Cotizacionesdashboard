@@ -100,6 +100,55 @@
       data = { available: false, error: e.message };
       render();
     }
+    loadPercent();   // el bloque de Porcentaje (solo super_admin)
+  }
+
+  // ---------- Porcentaje configurable (solo super_admin) ----------
+  const esSuper = () => window.NEBO_ROLE === 'super_admin';
+
+  async function loadPercent() {
+    const card = $('#pctCard');
+    if (!card) return;
+    if (!esSuper()) { card.hidden = true; return; }   // los demás ni lo ven
+    card.hidden = false;
+    try {
+      const r = await fetch('/api/porcentaje', { headers: deps.authHeaders() });
+      const d = await r.json();
+      const inp = $('#pctInput');
+      if (inp && document.activeElement !== inp) inp.value = (d && d.percent != null) ? d.percent : '';
+    } catch (_) {}
+  }
+
+  function pctMsg(texto, tipo) {
+    const el = $('#pctMsg');
+    if (!el) return;
+    el.textContent = texto || '';
+    el.className = 'ag__msg' + (tipo ? ' ag__msg--' + tipo : '');
+  }
+
+  async function guardarPercent() {
+    const inp = $('#pctInput');
+    if (!inp) return;
+    const val = Number(inp.value);
+    if (!Number.isFinite(val) || val < 0) { pctMsg('Escribe un número válido (≥ 0)', 'err'); return; }
+    const btn = $('#pctSave');
+    if (btn) btn.disabled = true;
+    pctMsg('Guardando…');
+    try {
+      const r = await fetch('/api/porcentaje', {
+        method: 'POST',
+        headers: Object.assign({ 'Content-Type': 'application/json' }, deps.authHeaders()),
+        body: JSON.stringify({ percent: val })
+      });
+      const d = await r.json().catch(() => null);
+      if (!r.ok || !d || d.error) throw new Error((d && d.error) || 'No se pudo guardar');
+      if (inp) inp.value = d.percent;
+      pctMsg('Guardado ✓', 'ok');
+    } catch (e) {
+      pctMsg(e.message, 'err');
+    } finally {
+      if (btn) btn.disabled = false;
+    }
   }
 
   async function guardar() {
@@ -142,6 +191,11 @@
     $('#agBox').addEventListener('change', e => {
       if (e.target.id === 'agNum') { numSel = e.target.value; msg(''); render(); }
     });
+    // Porcentaje (solo super_admin; la tarjeta puede estar oculta)
+    const pctSave = $('#pctSave');
+    if (pctSave) pctSave.addEventListener('click', guardarPercent);
+    const pctInput = $('#pctInput');
+    if (pctInput) pctInput.addEventListener('keydown', e => { if (e.key === 'Enter') guardarPercent(); });
   }
 
   window.Settings = { init, load };

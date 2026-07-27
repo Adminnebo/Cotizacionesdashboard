@@ -69,6 +69,14 @@ app.use('/api/auth', require('./authUsers')); // /api/auth/me, /users (solo admi
 // esto el reproductor embebido falla; aquí lo re-servimos desde el mismo origen.
 app.get('/api/recordings/proxy', require('./services/recordingProxy').handle);
 
+// ── Porcentaje configurable (Ajustes) ───────────────────────────────────────
+// GET ABIERTO a propósito: lo consulta un sistema externo sin sesión.
+// Va ANTES del gate de plataforma para que no exija login.
+const settingsStore = require('./settingsStore');
+app.get('/api/porcentaje', wrap(async (_req, res) => {
+  res.json({ percent: await settingsStore.getPercent() });
+}));
+
 // ── Gate de plataforma: todo lo demás exige acceso a 'cotizaciones' ──────────
 // Se eximen los webhooks de n8n (llevan su propia API key) y health.
 const { requirePlatform, requirePermission } = require('./analyticsAuth');
@@ -103,6 +111,15 @@ app.use('/api', require('./pipeline'));       // pipeline/oportunidades + webhoo
 app.use('/api', require('./quotes'));         // cotizaciones (MSSQL) + PDF (Supabase)
 app.use('/api', require('./calls'));          // llamadas del agente de voz + webhook n8n
 app.use('/api', require('./agents'));         // ajustes: qué agente atiende las llamadas
+
+// Fijar el porcentaje: SOLO super_admin. Va detrás del gate (ya exige sesión y
+// plataforma 'cotizaciones'); aquí además comprobamos el rol.
+app.post('/api/porcentaje', wrap(async (req, res) => {
+  if (!esSuper(req)) return res.status(403).json({ error: 'Solo el super admin puede cambiar el porcentaje' });
+  const b = req.body || {};
+  const percent = await settingsStore.setPercent(b.percent != null ? b.percent : b.porcentaje, 'super admin');
+  res.json({ ok: true, percent });
+}));
 
 // Vigilancia de la secuencia de cotizaciones: avisa a un webhook si hay huecos.
 const quoteGaps = require('./quoteGaps');

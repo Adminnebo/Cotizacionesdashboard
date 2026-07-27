@@ -85,6 +85,7 @@
         // Puerta de acceso: si no tiene 'cotizaciones', no entra.
         const plats = me.platforms || [];
         if (Array.isArray(plats) && plats.length && !plats.includes('cotizaciones')) return sinAcceso(plats);
+        window.NEBO_ROLE = me.role || null;   // lo usa Ajustes para el bloque de Porcentaje
         if (usersBtn && ['admin', 'super_admin'].includes(me.role)) usersBtn.hidden = false;
         // Permisos granulares: oculta las pestañas que el agente no tiene y, si la
         // activa quedó oculta, salta a la primera visible.
