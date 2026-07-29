@@ -136,7 +136,9 @@ app.get('/api/quotes/gaps', optionalAuth, wrap(async (_req, res) => {
 
 app.get('/api/stats', optionalAuth, wrap(async (req, res) => {
   const { from, to } = rangeOf(req);
-  const canSeeCost = puedeVerCostos(req); // costos: admin o permiso 'cotizaciones.costos'
+  // Consumo de IA (coste real por modelo): SOLO super_admin. El cliente ve el
+  // coste FINAL por mensaje (billing), que va abierto más abajo.
+  const canSeeCost = esSuper(req);
 
   const [kpi, rt, byDay, byHour, byType, execT, aiRows, quotes] = await Promise.all([
     q(`SELECT count(*) FILTER (WHERE direction='out') AS sent,
@@ -229,7 +231,8 @@ app.get('/api/stats', optionalAuth, wrap(async (req, res) => {
 const trunc = (t, n) => (t && t.length > n ? t.slice(0, n) + '…' : (t || ''));
 app.get('/api/messages', optionalAuth, wrap(async (req, res) => {
   const { from, to } = rangeOf(req);
-  const canSeeCost = puedeVerCostos(req);
+  // Coste de IA por mensaje: SOLO super_admin. El coste FINAL (charged) va abierto.
+  const canSeeCost = esSuper(req);
   const canSeeMargin = esSuper(req);   // % ganancia/pérdida: solo super_admin
 
   const limit = Math.min(200, Math.max(10, Number(req.query.limit) || 50));
