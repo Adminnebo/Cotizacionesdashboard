@@ -340,7 +340,8 @@ app.get('/api/messages', optionalAuth, wrap(async (req, res) => {
         status: m.status || '',
         responseSecs: m.response_secs != null ? Number(m.response_secs) : null,
         execSecs: m.execution_ms != null ? Number(m.execution_ms) : null,
-        model: m.model || null,
+        // El modelo de IA es dato interno: solo super_admin.
+        model: canSeeCost ? (m.model || null) : null,
         sentBy: m.sent_by || null,
         channel: m.channel || 'whatsapp',
         costUsd: (canSeeCost && m.cost_usd != null) ? Number(m.cost_usd) : null,

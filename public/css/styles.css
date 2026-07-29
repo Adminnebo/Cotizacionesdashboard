@@ -75,8 +75,12 @@ body { font-family: Inter, system-ui, sans-serif; background: var(--surface-0); 
 }
 /* ocultar la columna "Coste IA" (9ª) cuando no eres super_admin */
 .msgs--nocost th:nth-child(9), .msgs--nocost td:nth-child(9) { display: none; }
+/* ocultar la columna "Modelo" (8ª) — dato interno, solo super_admin */
+.msgs--nomodel th:nth-child(8), .msgs--nomodel td:nth-child(8) { display: none; }
 /* ocultar la columna "Ganancia" (11ª) cuando no eres super_admin */
 .msgs--nomargin th:nth-child(11), .msgs--nomargin td:nth-child(11) { display: none; }
+/* Llamadas: ocultar la columna "Coste" (6ª) — dato interno, solo super_admin */
+.calls--nocost th:nth-child(6), .calls--nocost td:nth-child(6) { display: none; }
 .msgs__gain { color: var(--ok, #16a34a); font-weight: 700; }
 .msgs__loss { color: var(--danger, #dc2626); font-weight: 700; }
 /* recap de ganancia/pérdida del rango (solo super_admin) */

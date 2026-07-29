@@ -52,20 +52,21 @@
     const r = data && data.recap;
     if (!r) { box.innerHTML = ''; box.hidden = true; agentsBox.innerHTML = ''; return; }
     box.hidden = false;
+    const canCost = data.canSeeCost !== false;   // coste: dato interno (solo super_admin)
     const tile = (label, value, sub) =>
       `<div class="quo__stat"><div class="quo__stat-val">${value}</div><div class="quo__stat-lbl">${label}</div>${sub ? `<div class="quo__stat-sub">${sub}</div>` : ''}</div>`;
     box.innerHTML =
       tile('Llamadas', fmtNum(r.calls)) +
-      tile('Coste total', fmtMoney(r.totalCost), 'Prom. ' + fmtMoney(r.avgCost) + '/llamada') +
+      (canCost ? tile('Coste total', fmtMoney(r.totalCost), 'Prom. ' + fmtMoney(r.avgCost) + '/llamada') : '') +
       tile('Duración total', fmtDurLong(r.totalDurationSecs), 'Prom. ' + fmtDur(r.avgDurationSecs) + '/llamada');
 
-    // Desglose por agente
+    // Desglose por agente (sin coste si no es super_admin)
     const ag = r.agents || [];
     if (!ag.length) { agentsBox.innerHTML = ''; return; }
     agentsBox.innerHTML = `<div class="call__agents-title">Por agente</div>` +
       ag.map(a => `<span class="call__agent">
         <b>${esc(a.agent)}</b>
-        <span class="dim">${fmtNum(a.calls)} llam. · ${fmtDur(a.durationSecs)} · ${fmtMoney(a.cost)}</span>
+        <span class="dim">${fmtNum(a.calls)} llam. · ${fmtDur(a.durationSecs)}${canCost ? ' · ' + fmtMoney(a.cost) : ''}</span>
       </span>`).join('');
   }
 
@@ -108,6 +109,8 @@
     const d = data;
     const body = $('#callsBody');
     if (!d) return;
+    const tbl = $('#callsTable');
+    if (tbl) tbl.classList.toggle('calls--nocost', d.canSeeCost === false);   // oculta col Coste (dato interno)
     renderRecap();
 
     if (!d.items || !d.items.length) {

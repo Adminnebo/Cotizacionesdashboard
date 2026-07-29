@@ -231,6 +231,7 @@
     const tbl = $('#msgsTable');
     if (tbl) {
       tbl.classList.toggle('msgs--nocost', d.canSeeCost === false);       // oculta col Coste IA
+      tbl.classList.toggle('msgs--nomodel', d.canSeeCost === false);      // oculta col Modelo (dato interno)
       tbl.classList.toggle('msgs--nomargin', d.canSeeMargin === false);   // oculta col Ganancia (no super admin)
     }
     renderMarginRecap(d);

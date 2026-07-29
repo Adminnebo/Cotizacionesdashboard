@@ -82,7 +82,8 @@ const shapeCall = (c, { full = false, super: canSuper = false } = {}) => ({
   hasTranscript: !!c.transcript,
   recordingUrl: c.recording_url || null,
   durationSecs: c.duration_secs != null ? Number(c.duration_secs) : null,
-  cost: c.cost != null ? Number(c.cost) : null,
+  // El coste es dato interno (consumo del agente de voz): solo super_admin.
+  cost: canSuper && c.cost != null ? Number(c.cost) : null,
   // Solo el super_admin lo recibe; para el resto ni siquiera viaja el campo.
   costDetail: canSuper ? (c.cost_detail || null) : undefined,
   externalId: c.external_id || null,
@@ -169,19 +170,22 @@ router.get('/calls', optionalAuth, wrap(async (req, res) => {
   const calls = num(a.calls);
   const totalCost = num(a.cost);
   const totalDur = num(a.dur);
+  // El coste (consumo del agente de voz) es dato interno: SOLO super_admin.
+  const canCost = esSuper(req);
 
   res.json({
     range: { from, to },
     page, limit, total: calls, currency: COST_CCY,
+    canSeeCost: canCost,
     recap: {
       calls,
-      totalCost,
+      totalCost: canCost ? totalCost : null,
       totalDurationSecs: totalDur,
       avgDurationSecs: calls ? totalDur / calls : 0,
-      avgCost: calls ? totalCost / calls : 0,
-      agents: byAgent.rows.map(r => ({ agent: r.agent, calls: num(r.calls), cost: num(r.cost), durationSecs: num(r.dur) }))
+      avgCost: canCost ? (calls ? totalCost / calls : 0) : null,
+      agents: byAgent.rows.map(r => ({ agent: r.agent, calls: num(r.calls), cost: canCost ? num(r.cost) : null, durationSecs: num(r.dur) }))
     },
-    items: rows.rows.map(c => shapeCall(c, { super: esSuper(req) }))
+    items: rows.rows.map(c => shapeCall(c, { super: canCost }))
   });
 }));
 
