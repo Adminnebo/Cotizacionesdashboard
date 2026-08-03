@@ -81,13 +81,19 @@ app.get('/api/recordings/proxy', require('./services/recordingProxy').handle);
 // Va ANTES del gate de plataforma para que no exija login.
 const settingsStore = require('./settingsStore');
 app.get('/api/porcentaje', wrap(async (req, res) => {
-  const name = req.query.name != null ? String(req.query.name) : '';
-  if (name) {                                   // ?name=... → un porcentaje concreto
-    const p = await settingsStore.getByName(name);
-    if (!p) return res.status(404).json({ error: 'No existe ese porcentaje', name });
-    return res.json({ name: p.name, slug: p.slug, percent: p.percent });
+  const agent = req.query.agent != null ? String(req.query.agent) : '';
+  const model = req.query.model != null ? String(req.query.model) : '';
+  if (agent && model) {                         // ?agent=..&model=.. → un modelo concreto
+    const m = await settingsStore.getModel(agent, model);
+    if (!m) return res.status(404).json({ error: 'No existe ese modelo', agent, model });
+    return res.json(m);                         // { agent, agentSlug, model, slug, percent }
   }
-  res.json({ percentages: await settingsStore.list() });   // sin nombre → todos
+  if (agent) {                                  // ?agent=.. → un agente con sus modelos
+    const a = await settingsStore.getAgent(agent);
+    if (!a) return res.status(404).json({ error: 'No existe ese agente', agent });
+    return res.json({ agent: a.name, slug: a.slug, models: a.models });
+  }
+  res.json({ agents: await settingsStore.listAll() });   // sin params → todo
 }));
 
 // ── Gate de plataforma: todo lo demás exige acceso a 'cotizaciones' ──────────
@@ -125,24 +131,41 @@ app.use('/api', require('./quotes'));         // cotizaciones (MSSQL) + PDF (Sup
 app.use('/api', require('./calls'));          // llamadas del agente de voz + webhook n8n
 app.use('/api', require('./agents'));         // ajustes: qué agente atiende las llamadas
 
-// Crear / editar un porcentaje con nombre: SOLO super_admin. Detrás del gate.
-app.post('/api/porcentaje', wrap(async (req, res) => {
-  if (!esSuper(req)) return res.status(403).json({ error: 'Solo el super admin puede cambiar los porcentajes' });
+// Agentes y modelos: crear/editar/borrar. TODO detrás del gate y SOLO super_admin.
+const soloSuper = (req, res) => { if (esSuper(req)) return true; res.status(403).json({ error: 'Solo el super admin puede cambiar esto' }); return false; };
+
+// Agente: crear (name) o renombrar (id, name).
+app.post('/api/porcentaje/agente', wrap(async (req, res) => {
+  if (!soloSuper(req, res)) return;
   const b = req.body || {};
-  try {
-    const p = await settingsStore.save(
-      { id: b.id, name: b.name != null ? b.name : b.nombre, percent: b.percent != null ? b.percent : b.porcentaje },
-      'super admin');
-    res.json({ ok: true, percentage: p });
-  } catch (e) { res.status(e.status || 500).json({ error: e.message }); }
+  try { res.json({ ok: true, agent: await settingsStore.saveAgent({ id: b.id, name: b.name != null ? b.name : b.nombre }) }); }
+  catch (e) { res.status(e.status || 500).json({ error: e.message }); }
+}));
+app.delete('/api/porcentaje/agente', wrap(async (req, res) => {
+  if (!soloSuper(req, res)) return;
+  const id = req.query.id || (req.body && req.body.id);
+  if (!id) return res.status(400).json({ error: 'Falta el id del agente' });
+  res.json({ ok: await settingsStore.removeAgent(id) });
 }));
 
-// Borrar un porcentaje por id: SOLO super_admin.
-app.delete('/api/porcentaje', wrap(async (req, res) => {
-  if (!esSuper(req)) return res.status(403).json({ error: 'Solo el super admin puede borrar porcentajes' });
+// Modelo dentro de un agente: crear (agentId, name, percent) o editar (id, name, percent).
+app.post('/api/porcentaje/modelo', wrap(async (req, res) => {
+  if (!soloSuper(req, res)) return;
+  const b = req.body || {};
+  try {
+    const m = await settingsStore.saveModel({
+      id: b.id, agentId: b.agentId != null ? b.agentId : b.agent_id,
+      name: b.name != null ? b.name : b.nombre,
+      percent: b.percent != null ? b.percent : b.porcentaje
+    });
+    res.json({ ok: true, model: m });
+  } catch (e) { res.status(e.status || 500).json({ error: e.message }); }
+}));
+app.delete('/api/porcentaje/modelo', wrap(async (req, res) => {
+  if (!soloSuper(req, res)) return;
   const id = req.query.id || (req.body && req.body.id);
-  if (!id) return res.status(400).json({ error: 'Falta el id' });
-  res.json({ ok: await settingsStore.remove(id) });
+  if (!id) return res.status(400).json({ error: 'Falta el id del modelo' });
+  res.json({ ok: await settingsStore.removeModel(id) });
 }));
 
 // Vigilancia de la secuencia de cotizaciones: avisa a un webhook si hay huecos.

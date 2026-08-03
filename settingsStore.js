@@ -1,7 +1,8 @@
 /* =========================================================
-   settingsStore.js — Porcentajes CON NOMBRE, configurables por el super_admin
-   en Ajustes y consultables por GET (por nombre o todos).
-   Tabla propia `percentages` (en la misma base del panel).
+   settingsStore.js — Agentes y, dentro de cada uno, sus MODELOS con
+   porcentaje. Dos niveles: agente → modelos. Configurable por el super_admin
+   en Ajustes y consultable por GET (por agente, por modelo, o todo).
+   Tablas: pct_agents, pct_models (en la misma base del panel).
    ========================================================= */
 'use strict';
 const { q } = require('./db');
@@ -9,14 +10,25 @@ const { q } = require('./db');
 let ready = null;
 function ensure() {
   if (ready) return ready;
-  ready = q(`CREATE TABLE IF NOT EXISTS percentages (
-    id BIGSERIAL PRIMARY KEY,
-    name TEXT NOT NULL,
-    slug TEXT UNIQUE,
-    percent NUMERIC NOT NULL DEFAULT 0,
-    created_at TIMESTAMPTZ DEFAULT now(),
-    updated_at TIMESTAMPTZ DEFAULT now()
-  )`).catch(e => { ready = null; throw e; });
+  ready = (async () => {
+    await q(`CREATE TABLE IF NOT EXISTS pct_agents (
+      id BIGSERIAL PRIMARY KEY,
+      name TEXT NOT NULL,
+      slug TEXT UNIQUE,
+      created_at TIMESTAMPTZ DEFAULT now(),
+      updated_at TIMESTAMPTZ DEFAULT now()
+    )`);
+    await q(`CREATE TABLE IF NOT EXISTS pct_models (
+      id BIGSERIAL PRIMARY KEY,
+      agent_id BIGINT REFERENCES pct_agents(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      slug TEXT,
+      percent NUMERIC NOT NULL DEFAULT 0,
+      created_at TIMESTAMPTZ DEFAULT now(),
+      updated_at TIMESTAMPTZ DEFAULT now(),
+      UNIQUE (agent_id, slug)
+    )`);
+  })().catch(e => { ready = null; throw e; });
   return ready;
 }
 
@@ -26,69 +38,100 @@ function slugify(name) {
     .normalize('NFD').replace(/[̀-ͯ]/g, '')
     .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
 }
-const shape = r => ({ id: String(r.id), name: r.name, slug: r.slug, percent: Number(r.percent) });
+const err = (msg, status) => { const e = new Error(msg); e.status = status || 400; return e; };
+const shapeModel = m => ({ id: String(m.id), name: m.name, slug: m.slug, percent: Number(m.percent) });
 
-// Todos los porcentajes (para la lista de Ajustes).
-async function list() {
+// Todos los agentes con sus modelos anidados.
+async function listAll() {
   await ensure();
-  const r = await q(`SELECT id, name, slug, percent FROM percentages ORDER BY name ASC`);
-  return r.rows.map(shape);
+  const a = await q(`SELECT id, name, slug FROM pct_agents ORDER BY name ASC`);
+  const m = await q(`SELECT id, agent_id, name, slug, percent FROM pct_models ORDER BY name ASC`);
+  const porAgente = new Map();
+  m.rows.forEach(r => { const k = String(r.agent_id); if (!porAgente.has(k)) porAgente.set(k, []); porAgente.get(k).push(shapeModel(r)); });
+  return a.rows.map(ag => ({ id: String(ag.id), name: ag.name, slug: ag.slug, models: porAgente.get(String(ag.id)) || [] }));
 }
 
-// Uno por nombre (o slug). Devuelve null si no existe.
-async function getByName(name) {
+// Un agente por nombre/slug, con sus modelos (o null).
+async function getAgent(name) {
   await ensure();
   const s = slugify(name);
   if (!s) return null;
-  const r = await q(`SELECT id, name, slug, percent FROM percentages WHERE slug=$1`, [s]);
-  return r.rows[0] ? shape(r.rows[0]) : null;
+  const a = await q(`SELECT id, name, slug FROM pct_agents WHERE slug=$1`, [s]);
+  if (!a.rows[0]) return null;
+  const ag = a.rows[0];
+  const m = await q(`SELECT id, name, slug, percent FROM pct_models WHERE agent_id=$1 ORDER BY name ASC`, [ag.id]);
+  return { id: String(ag.id), name: ag.name, slug: ag.slug, models: m.rows.map(shapeModel) };
 }
 
-function validar(name, percent) {
-  const nombre = String(name || '').trim();
-  if (!nombre) { const e = new Error('El nombre es obligatorio'); e.status = 400; throw e; }
-  if (slugify(nombre) === '') { const e = new Error('El nombre no es válido'); e.status = 400; throw e; }
-  const n = Number(percent);
-  if (!Number.isFinite(n) || n < 0) { const e = new Error('Porcentaje inválido'); e.status = 400; throw e; }
-  return { nombre, valor: Math.round(n * 100) / 100 };
-}
-
-// Crea o actualiza. Con id → edita esa fila (permite renombrar). Sin id → upsert
-// por slug (mismo nombre = actualizar su valor). Devuelve la fila resultante.
-async function save({ id, name, percent }, actor) {
+// Un modelo concreto dentro de un agente (o null).
+async function getModel(agentName, modelName) {
   await ensure();
-  const { nombre, valor } = validar(name, percent);
+  const as = slugify(agentName), ms = slugify(modelName);
+  if (!as || !ms) return null;
+  const r = await q(
+    `SELECT m.id, m.name, m.slug, m.percent, a.name AS agent, a.slug AS agent_slug
+     FROM pct_models m JOIN pct_agents a ON a.id = m.agent_id
+     WHERE a.slug=$1 AND m.slug=$2`, [as, ms]);
+  if (!r.rows[0]) return null;
+  const x = r.rows[0];
+  return { agent: x.agent, agentSlug: x.agent_slug, model: x.name, slug: x.slug, percent: Number(x.percent) };
+}
+
+// ---- Agentes ----
+async function saveAgent({ id, name }) {
+  await ensure();
+  const nombre = String(name || '').trim();
+  if (!nombre || slugify(nombre) === '') throw err('El nombre del agente es obligatorio');
   const slug = slugify(nombre);
-  let row;
   try {
     if (id) {
-      const r = await q(
-        `UPDATE percentages SET name=$2, slug=$3, percent=$4, updated_at=now() WHERE id=$1
-         RETURNING id, name, slug, percent`, [id, nombre, slug, valor]);
-      if (!r.rows[0]) { const e = new Error('No existe ese porcentaje'); e.status = 404; throw e; }
-      row = r.rows[0];
-    } else {
-      const r = await q(
-        `INSERT INTO percentages (name, slug, percent, updated_at) VALUES ($1,$2,$3, now())
-         ON CONFLICT (slug) DO UPDATE SET name=EXCLUDED.name, percent=EXCLUDED.percent, updated_at=now()
-         RETURNING id, name, slug, percent`, [nombre, slug, valor]);
-      row = r.rows[0];
+      const r = await q(`UPDATE pct_agents SET name=$2, slug=$3, updated_at=now() WHERE id=$1 RETURNING id,name,slug`, [id, nombre, slug]);
+      if (!r.rows[0]) throw err('No existe ese agente', 404);
+      return { id: String(r.rows[0].id), name: r.rows[0].name, slug: r.rows[0].slug };
     }
+    const r = await q(`INSERT INTO pct_agents (name, slug) VALUES ($1,$2) RETURNING id,name,slug`, [nombre, slug]);
+    return { id: String(r.rows[0].id), name: r.rows[0].name, slug: r.rows[0].slug };
   } catch (e) {
-    if (/unique|duplicate/i.test(e.message)) { const err = new Error('Ya existe un porcentaje con ese nombre'); err.status = 409; throw err; }
+    if (/unique|duplicate/i.test(e.message)) throw err('Ya existe un agente con ese nombre', 409);
     throw e;
   }
-  try {
-    await q(`INSERT INTO action_logs (action, actor_name, detail) VALUES ($1,$2,$3)`,
-      ['percent_set', actor || 'panel', `Porcentaje "${nombre}" = ${valor}%`]);
-  } catch (_) {}
-  return shape(row);
 }
-
-async function remove(id) {
+async function removeAgent(id) {
   await ensure();
-  const r = await q(`DELETE FROM percentages WHERE id=$1 RETURNING id`, [id]);
+  const r = await q(`DELETE FROM pct_agents WHERE id=$1 RETURNING id`, [id]);
   return !!r.rows[0];
 }
 
-module.exports = { list, getByName, save, remove, slugify };
+// ---- Modelos (dentro de un agente) ----
+async function saveModel({ id, agentId, name, percent }) {
+  await ensure();
+  const nombre = String(name || '').trim();
+  if (!nombre || slugify(nombre) === '') throw err('El nombre del modelo es obligatorio');
+  const n = Number(percent);
+  if (!Number.isFinite(n) || n < 0) throw err('Porcentaje inválido');
+  const slug = slugify(nombre), valor = Math.round(n * 100) / 100;
+  try {
+    if (id) {
+      const r = await q(`UPDATE pct_models SET name=$2, slug=$3, percent=$4, updated_at=now() WHERE id=$1 RETURNING id,name,slug,percent`, [id, nombre, slug, valor]);
+      if (!r.rows[0]) throw err('No existe ese modelo', 404);
+      return shapeModel(r.rows[0]);
+    }
+    if (!agentId) throw err('Falta el agente');
+    const r = await q(
+      `INSERT INTO pct_models (agent_id, name, slug, percent) VALUES ($1,$2,$3,$4)
+       ON CONFLICT (agent_id, slug) DO UPDATE SET name=EXCLUDED.name, percent=EXCLUDED.percent, updated_at=now()
+       RETURNING id,name,slug,percent`, [agentId, nombre, slug, valor]);
+    return shapeModel(r.rows[0]);
+  } catch (e) {
+    if (e.status) throw e;
+    if (/foreign key/i.test(e.message)) throw err('El agente no existe', 404);
+    throw e;
+  }
+}
+async function removeModel(id) {
+  await ensure();
+  const r = await q(`DELETE FROM pct_models WHERE id=$1 RETURNING id`, [id]);
+  return !!r.rows[0];
+}
+
+module.exports = { listAll, getAgent, getModel, saveAgent, removeAgent, saveModel, removeModel, slugify };

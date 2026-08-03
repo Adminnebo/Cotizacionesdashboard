@@ -103,9 +103,10 @@
     loadPercent();   // el bloque de Porcentaje (solo super_admin)
   }
 
-  // ---------- Porcentajes con nombre (solo super_admin) ----------
+  // ---------- Agentes → modelos con porcentaje (solo super_admin) ----------
   const esSuper = () => window.NEBO_ROLE === 'super_admin';
-  let pcts = [];   // [{ id, name, slug, percent }]
+  let agentes = [];                 // [{ id, name, slug, models:[{id,name,slug,percent}] }]
+  const abiertos = new Set();       // ids de agentes desplegados (persiste entre renders)
 
   async function loadPercent() {
     const card = $('#pctCard');
@@ -115,23 +116,44 @@
     try {
       const r = await fetch('/api/porcentaje', { headers: deps.authHeaders() });
       const d = await r.json();
-      pcts = (d && d.percentages) || [];
-      renderPcts();
+      agentes = (d && d.agents) || [];
+      renderAgentes();
     } catch (e) { pctMsg(e.message, 'err'); }
   }
 
-  function renderPcts() {
+  function renderAgentes() {
     const box = $('#pctList');
     if (!box) return;
-    if (!pcts.length) { box.innerHTML = '<p class="muted small">Aún no hay porcentajes. Crea el primero abajo.</p>'; return; }
-    box.innerHTML = pcts.map(p => `
-      <div class="pct__item" data-id="${esc(p.id)}">
-        <span class="pct__item-name" title="GET /api/porcentaje?name=${esc(p.slug)}">${esc(p.name)}</span>
-        <input type="number" class="pct__input pct__item-val" step="0.01" min="0" value="${esc(p.percent)}" />
-        <span class="pct__sign">%</span>
-        <button class="q__btn pct__item-save" data-act="save">Guardar</button>
-        <button class="pct__item-del" data-act="del" title="Eliminar">✕</button>
-      </div>`).join('');
+    if (!agentes.length) { box.innerHTML = '<p class="muted small">Aún no hay agentes. Crea el primero abajo.</p>'; return; }
+    box.innerHTML = agentes.map(a => {
+      const open = abiertos.has(a.id);
+      const modelos = a.models.map(m => `
+        <div class="md-item" data-model="${esc(m.id)}">
+          <span class="md-name" title="GET /api/porcentaje?agent=${esc(a.slug)}&model=${esc(m.slug)}">${esc(m.name)}</span>
+          <input type="number" class="pct__input md-val" step="0.01" min="0" value="${esc(m.percent)}" />
+          <span class="pct__sign">%</span>
+          <button class="q__btn md-save" data-act="mdsave">Guardar</button>
+          <button class="pct__item-del" data-act="mddel" title="Eliminar modelo">✕</button>
+        </div>`).join('');
+      return `
+      <div class="ag-item ${open ? 'ag-item--open' : ''}" data-agent="${esc(a.id)}">
+        <div class="ag-head" data-act="toggle">
+          <span class="ag-caret">${open ? '▾' : '▸'}</span>
+          <span class="ag-name">${esc(a.name)}</span>
+          <span class="ag-count">${a.models.length} modelo${a.models.length === 1 ? '' : 's'}</span>
+          <button class="pct__item-del" data-act="agdel" title="Eliminar agente">✕</button>
+        </div>
+        <div class="ag-body" ${open ? '' : 'hidden'}>
+          <div class="md-list">${modelos || '<p class="muted small" style="margin:4px 0 8px">Sin modelos todavía.</p>'}</div>
+          <div class="md-add">
+            <input type="text" class="pct__name md-new-name" maxlength="60" placeholder="Modelo (ej. Deepseek)" />
+            <input type="number" class="pct__input md-new-val" step="0.01" min="0" placeholder="0" />
+            <span class="pct__sign">%</span>
+            <button class="q__btn md-add-btn" data-act="mdadd">Añadir modelo</button>
+          </div>
+        </div>
+      </div>`;
+    }).join('');
   }
 
   function pctMsg(texto, tipo) {
@@ -141,55 +163,65 @@
     el.className = 'ag__msg' + (tipo ? ' ag__msg--' + tipo : '');
   }
 
-  async function postPct(body) {
-    const r = await fetch('/api/porcentaje', {
-      method: 'POST',
-      headers: Object.assign({ 'Content-Type': 'application/json' }, deps.authHeaders()),
-      body: JSON.stringify(body)
-    });
+  async function api(path, method, body) {
+    const opts = { method, headers: deps.authHeaders() };
+    if (body) { opts.headers = Object.assign({ 'Content-Type': 'application/json' }, opts.headers); opts.body = JSON.stringify(body); }
+    const r = await fetch(path, opts);
     const d = await r.json().catch(() => null);
-    if (!r.ok || !d || d.error) throw new Error((d && d.error) || 'No se pudo guardar');
-    return d.percentage;
+    if (!r.ok || !d || d.error) throw new Error((d && d.error) || 'Error ' + r.status);
+    return d;
   }
 
-  async function añadirPct() {
-    const name = ($('#pctNewName').value || '').trim();
-    const val = Number($('#pctNewVal').value);
-    if (!name) { pctMsg('Escribe un nombre', 'err'); return; }
-    if (!Number.isFinite(val) || val < 0) { pctMsg('Escribe un número válido (≥ 0)', 'err'); return; }
-    const btn = $('#pctAdd'); if (btn) btn.disabled = true;
-    pctMsg('Guardando…');
+  // ---- agentes ----
+  async function añadirAgente() {
+    const name = ($('#pctNewAgent').value || '').trim();
+    if (!name) { pctMsg('Escribe el nombre del agente', 'err'); return; }
+    const btn = $('#pctAddAgent'); if (btn) btn.disabled = true;
+    pctMsg('Creando…');
     try {
-      await postPct({ name, percent: val });
-      $('#pctNewName').value = ''; $('#pctNewVal').value = '';
-      pctMsg('Añadido ✓', 'ok');
+      const d = await api('/api/porcentaje/agente', 'POST', { name });
+      $('#pctNewAgent').value = '';
+      if (d.agent) abiertos.add(d.agent.id);     // lo dejamos desplegado para añadir modelos
+      pctMsg('Agente creado ✓', 'ok');
       await loadPercent();
     } catch (e) { pctMsg(e.message, 'err'); }
     finally { if (btn) btn.disabled = false; }
   }
-
-  async function guardarFila(row) {
-    const id = row.dataset.id;
-    const val = Number(row.querySelector('.pct__item-val').value);
-    const name = (pcts.find(p => p.id === id) || {}).name;
-    if (!Number.isFinite(val) || val < 0) { pctMsg('Valor inválido', 'err'); return; }
-    pctMsg('Guardando…');
-    try { await postPct({ id, name, percent: val }); pctMsg('Guardado ✓', 'ok'); await loadPercent(); }
+  async function borrarAgente(id) {
+    const a = agentes.find(x => x.id === id);
+    if (!confirm('¿Eliminar el agente "' + (a ? a.name : '') + '" y todos sus modelos?')) return;
+    pctMsg('Eliminando…');
+    try { await api('/api/porcentaje/agente?id=' + encodeURIComponent(id), 'DELETE'); abiertos.delete(id); pctMsg('Eliminado ✓', 'ok'); await loadPercent(); }
     catch (e) { pctMsg(e.message, 'err'); }
   }
 
-  async function borrarFila(row) {
-    const id = row.dataset.id;
-    const p = pcts.find(x => x.id === id);
-    if (!confirm('¿Eliminar el porcentaje "' + (p ? p.name : '') + '"?')) return;
+  // ---- modelos ----
+  async function añadirModelo(agItem) {
+    const agentId = agItem.dataset.agent;
+    const name = (agItem.querySelector('.md-new-name').value || '').trim();
+    const val = Number(agItem.querySelector('.md-new-val').value);
+    if (!name) { pctMsg('Escribe el nombre del modelo', 'err'); return; }
+    if (!Number.isFinite(val) || val < 0) { pctMsg('Porcentaje inválido (≥ 0)', 'err'); return; }
+    pctMsg('Guardando…');
+    try { await api('/api/porcentaje/modelo', 'POST', { agentId, name, percent: val }); abiertos.add(agentId); pctMsg('Modelo añadido ✓', 'ok'); await loadPercent(); }
+    catch (e) { pctMsg(e.message, 'err'); }
+  }
+  async function guardarModelo(mdItem, agentId) {
+    const id = mdItem.dataset.model;
+    const val = Number(mdItem.querySelector('.md-val').value);
+    const ag = agentes.find(a => a.id === agentId);
+    const name = ((ag && ag.models.find(m => m.id === id)) || {}).name;
+    if (!Number.isFinite(val) || val < 0) { pctMsg('Valor inválido', 'err'); return; }
+    pctMsg('Guardando…');
+    try { abiertos.add(agentId); await api('/api/porcentaje/modelo', 'POST', { id, name, percent: val }); pctMsg('Guardado ✓', 'ok'); await loadPercent(); }
+    catch (e) { pctMsg(e.message, 'err'); }
+  }
+  async function borrarModelo(mdItem, agentId) {
+    const id = mdItem.dataset.model;
+    if (!confirm('¿Eliminar este modelo?')) return;
     pctMsg('Eliminando…');
-    try {
-      const r = await fetch('/api/porcentaje?id=' + encodeURIComponent(id), { method: 'DELETE', headers: deps.authHeaders() });
-      const d = await r.json().catch(() => null);
-      if (!r.ok || !d || d.error) throw new Error((d && d.error) || 'No se pudo eliminar');
-      pctMsg('Eliminado ✓', 'ok');
-      await loadPercent();
-    } catch (e) { pctMsg(e.message, 'err'); }
+    try { abiertos.add(agentId); await api('/api/porcentaje/modelo?id=' + encodeURIComponent(id), 'DELETE'); pctMsg('Eliminado ✓', 'ok'); await loadPercent(); }
+    catch (e) { pctMsg(e.message, 'err'); }
   }
 
   async function guardar() {
@@ -232,22 +264,32 @@
     $('#agBox').addEventListener('change', e => {
       if (e.target.id === 'agNum') { numSel = e.target.value; msg(''); render(); }
     });
-    // Porcentajes (solo super_admin; la tarjeta puede estar oculta)
-    const addBtn = $('#pctAdd');
-    if (addBtn) addBtn.addEventListener('click', añadirPct);
-    const newVal = $('#pctNewVal');
-    if (newVal) newVal.addEventListener('keydown', e => { if (e.key === 'Enter') añadirPct(); });
+    // Agentes y modelos (solo super_admin; la tarjeta puede estar oculta)
+    const addAg = $('#pctAddAgent');
+    if (addAg) addAg.addEventListener('click', añadirAgente);
+    const newAg = $('#pctNewAgent');
+    if (newAg) newAg.addEventListener('keydown', e => { if (e.key === 'Enter') añadirAgente(); });
     const list = $('#pctList');
     if (list) {
       list.addEventListener('click', e => {
         const b = e.target.closest('[data-act]');
         if (!b) return;
-        const row = b.closest('.pct__item');
-        if (b.dataset.act === 'save') guardarFila(row);
-        else if (b.dataset.act === 'del') borrarFila(row);
+        const agItem = b.closest('.ag-item');
+        const agentId = agItem ? agItem.dataset.agent : null;
+        const act = b.dataset.act;
+        if (act === 'toggle') {                       // desplegar/plegar el agente
+          if (abiertos.has(agentId)) abiertos.delete(agentId); else abiertos.add(agentId);
+          renderAgentes();
+        } else if (act === 'agdel') { e.stopPropagation(); borrarAgente(agentId); }
+        else if (act === 'mdadd') añadirModelo(agItem);
+        else if (act === 'mdsave') guardarModelo(b.closest('.md-item'), agentId);
+        else if (act === 'mddel') borrarModelo(b.closest('.md-item'), agentId);
       });
       list.addEventListener('keydown', e => {
-        if (e.key === 'Enter' && e.target.classList.contains('pct__item-val')) guardarFila(e.target.closest('.pct__item'));
+        if (e.key !== 'Enter') return;
+        const agItem = e.target.closest('.ag-item');
+        if (e.target.classList.contains('md-val')) guardarModelo(e.target.closest('.md-item'), agItem.dataset.agent);
+        else if (e.target.classList.contains('md-new-val') || e.target.classList.contains('md-new-name')) añadirModelo(agItem);
       });
     }
   }

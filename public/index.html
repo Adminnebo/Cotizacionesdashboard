@@ -236,21 +236,21 @@
         <p class="card__note">Elige qué agente de voz atiende las llamadas entrantes del número. El cambio se aplica de inmediato y queda registrado en Registros.</p>
       </section>
 
-      <!-- Porcentajes con nombre — SOLO super_admin (se revela por JS) -->
+      <!-- Agentes → modelos con porcentaje — SOLO super_admin (se revela por JS) -->
       <section class="card card--wide" id="pctCard" hidden>
         <div class="card__head">
-          <h2>Porcentajes</h2>
+          <h2>Agentes y modelos</h2>
           <span class="pct__tag">Solo super admin</span>
         </div>
         <div id="pctList" class="pct__list"><p class="muted">Cargando…</p></div>
         <div class="pct__add">
-          <input type="text" id="pctNewName" class="pct__name" maxlength="60" placeholder="Nombre (ej. Comisión)" />
-          <input type="number" id="pctNewVal" class="pct__input" step="0.01" min="0" inputmode="decimal" placeholder="0" />
-          <span class="pct__sign">%</span>
-          <button class="q__btn pct__addbtn" id="pctAdd">Añadir</button>
+          <input type="text" id="pctNewAgent" class="pct__name" maxlength="60" placeholder="Nombre del agente (ej. Camila)" />
+          <button class="q__btn pct__addbtn" id="pctAddAgent">Añadir agente</button>
         </div>
         <span id="pctMsg" class="ag__msg"></span>
-        <p class="card__note">Cada porcentaje se consulta desde fuera por <code>GET /api/porcentaje?name=&lt;nombre&gt;</code> (o <code>/api/porcentaje</code> para todos). Solo el super admin puede cambiarlos.</p>
+        <p class="card__note">Despliega un agente para ver y editar sus modelos. Se consulta desde fuera por
+          <code>GET /api/porcentaje?agent=&lt;agente&gt;&amp;model=&lt;modelo&gt;</code>
+          (o <code>?agent=&lt;agente&gt;</code> para sus modelos, o <code>/api/porcentaje</code> para todo). Solo el super admin puede cambiarlo.</p>
       </section>
     </div>
   </main>
