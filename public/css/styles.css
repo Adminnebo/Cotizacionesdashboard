@@ -91,13 +91,20 @@ body { font-family: Inter, system-ui, sans-serif; background: var(--surface-0); 
 .msgs-recap__net { margin-left: auto; font-size: 14px; }
 .msgs-recap__net b { color: inherit; }
 .msgs-recap__pct { font-weight: 800; }
-/* ajustes: porcentaje configurable (solo super_admin) */
+/* ajustes: porcentajes con nombre (solo super_admin) */
 .pct__tag { font-size: 9.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .03em; color: #fff; background: #d9a400; padding: 2px 7px; border-radius: 5px; }
-.pct__row { display: flex; align-items: center; gap: 10px; margin: 4px 0 2px; }
-.pct__input { width: 120px; padding: 9px 11px; font-size: 15px; font-weight: 600; text-align: right; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-1); color: var(--text); }
+.pct__input { width: 110px; padding: 9px 11px; font-size: 15px; font-weight: 600; text-align: right; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-1); color: var(--text); }
 .pct__input:focus { outline: none; border-color: var(--accent, #4c8bf5); }
 .pct__sign { font-size: 15px; font-weight: 700; color: var(--text-muted); margin-left: -4px; }
-.pct__save { margin-left: 4px; }
+.pct__name { flex: 1; min-width: 140px; padding: 9px 11px; font-size: 14px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-1); color: var(--text); }
+.pct__name:focus { outline: none; border-color: var(--accent, #4c8bf5); }
+.pct__list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
+.pct__item { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-1); }
+.pct__item-name { flex: 1; min-width: 0; font-weight: 600; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pct__item-del { width: 30px; height: 30px; border-radius: 8px; color: var(--text-muted); font-size: 15px; cursor: pointer; background: transparent; border: 0; }
+.pct__item-del:hover { background: rgba(220,38,38,.15); color: #f87171; }
+.pct__add { display: flex; align-items: center; gap: 10px; padding-top: 12px; border-top: 1px dashed var(--border); }
+.pct__addbtn { margin-left: 2px; }
 .msgs__human { color: var(--sent); font-weight: 600; }
 .kpi__label { font-size: 13px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: .03em; display: flex; align-items: center; justify-content: center; gap: 7px; }
 .kpi__dot { width: 9px; height: 9px; border-radius: 50%; }

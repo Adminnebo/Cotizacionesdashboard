@@ -236,19 +236,21 @@
         <p class="card__note">Elige qué agente de voz atiende las llamadas entrantes del número. El cambio se aplica de inmediato y queda registrado en Registros.</p>
       </section>
 
-      <!-- Porcentaje configurable — SOLO super_admin (se revela por JS) -->
+      <!-- Porcentajes con nombre — SOLO super_admin (se revela por JS) -->
       <section class="card card--wide" id="pctCard" hidden>
         <div class="card__head">
-          <h2>Porcentaje</h2>
+          <h2>Porcentajes</h2>
           <span class="pct__tag">Solo super admin</span>
         </div>
-        <div class="pct__row">
-          <input type="number" id="pctInput" class="pct__input" step="0.01" min="0" inputmode="decimal" placeholder="0" />
+        <div id="pctList" class="pct__list"><p class="muted">Cargando…</p></div>
+        <div class="pct__add">
+          <input type="text" id="pctNewName" class="pct__name" maxlength="60" placeholder="Nombre (ej. Comisión)" />
+          <input type="number" id="pctNewVal" class="pct__input" step="0.01" min="0" inputmode="decimal" placeholder="0" />
           <span class="pct__sign">%</span>
-          <button class="q__btn pct__save" id="pctSave">Guardar</button>
-          <span id="pctMsg" class="ag__msg"></span>
+          <button class="q__btn pct__addbtn" id="pctAdd">Añadir</button>
         </div>
-        <p class="card__note">Este valor se consulta desde fuera por <code>GET /api/porcentaje</code>. Solo el super admin puede cambiarlo.</p>
+        <span id="pctMsg" class="ag__msg"></span>
+        <p class="card__note">Cada porcentaje se consulta desde fuera por <code>GET /api/porcentaje?name=&lt;nombre&gt;</code> (o <code>/api/porcentaje</code> para todos). Solo el super admin puede cambiarlos.</p>
       </section>
     </div>
   </main>

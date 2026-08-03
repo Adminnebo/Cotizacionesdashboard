@@ -103,8 +103,9 @@
     loadPercent();   // el bloque de Porcentaje (solo super_admin)
   }
 
-  // ---------- Porcentaje configurable (solo super_admin) ----------
+  // ---------- Porcentajes con nombre (solo super_admin) ----------
   const esSuper = () => window.NEBO_ROLE === 'super_admin';
+  let pcts = [];   // [{ id, name, slug, percent }]
 
   async function loadPercent() {
     const card = $('#pctCard');
@@ -114,9 +115,23 @@
     try {
       const r = await fetch('/api/porcentaje', { headers: deps.authHeaders() });
       const d = await r.json();
-      const inp = $('#pctInput');
-      if (inp && document.activeElement !== inp) inp.value = (d && d.percent != null) ? d.percent : '';
-    } catch (_) {}
+      pcts = (d && d.percentages) || [];
+      renderPcts();
+    } catch (e) { pctMsg(e.message, 'err'); }
+  }
+
+  function renderPcts() {
+    const box = $('#pctList');
+    if (!box) return;
+    if (!pcts.length) { box.innerHTML = '<p class="muted small">Aún no hay porcentajes. Crea el primero abajo.</p>'; return; }
+    box.innerHTML = pcts.map(p => `
+      <div class="pct__item" data-id="${esc(p.id)}">
+        <span class="pct__item-name" title="GET /api/porcentaje?name=${esc(p.slug)}">${esc(p.name)}</span>
+        <input type="number" class="pct__input pct__item-val" step="0.01" min="0" value="${esc(p.percent)}" />
+        <span class="pct__sign">%</span>
+        <button class="q__btn pct__item-save" data-act="save">Guardar</button>
+        <button class="pct__item-del" data-act="del" title="Eliminar">✕</button>
+      </div>`).join('');
   }
 
   function pctMsg(texto, tipo) {
@@ -126,29 +141,55 @@
     el.className = 'ag__msg' + (tipo ? ' ag__msg--' + tipo : '');
   }
 
-  async function guardarPercent() {
-    const inp = $('#pctInput');
-    if (!inp) return;
-    const val = Number(inp.value);
+  async function postPct(body) {
+    const r = await fetch('/api/porcentaje', {
+      method: 'POST',
+      headers: Object.assign({ 'Content-Type': 'application/json' }, deps.authHeaders()),
+      body: JSON.stringify(body)
+    });
+    const d = await r.json().catch(() => null);
+    if (!r.ok || !d || d.error) throw new Error((d && d.error) || 'No se pudo guardar');
+    return d.percentage;
+  }
+
+  async function añadirPct() {
+    const name = ($('#pctNewName').value || '').trim();
+    const val = Number($('#pctNewVal').value);
+    if (!name) { pctMsg('Escribe un nombre', 'err'); return; }
     if (!Number.isFinite(val) || val < 0) { pctMsg('Escribe un número válido (≥ 0)', 'err'); return; }
-    const btn = $('#pctSave');
-    if (btn) btn.disabled = true;
+    const btn = $('#pctAdd'); if (btn) btn.disabled = true;
     pctMsg('Guardando…');
     try {
-      const r = await fetch('/api/porcentaje', {
-        method: 'POST',
-        headers: Object.assign({ 'Content-Type': 'application/json' }, deps.authHeaders()),
-        body: JSON.stringify({ percent: val })
-      });
+      await postPct({ name, percent: val });
+      $('#pctNewName').value = ''; $('#pctNewVal').value = '';
+      pctMsg('Añadido ✓', 'ok');
+      await loadPercent();
+    } catch (e) { pctMsg(e.message, 'err'); }
+    finally { if (btn) btn.disabled = false; }
+  }
+
+  async function guardarFila(row) {
+    const id = row.dataset.id;
+    const val = Number(row.querySelector('.pct__item-val').value);
+    const name = (pcts.find(p => p.id === id) || {}).name;
+    if (!Number.isFinite(val) || val < 0) { pctMsg('Valor inválido', 'err'); return; }
+    pctMsg('Guardando…');
+    try { await postPct({ id, name, percent: val }); pctMsg('Guardado ✓', 'ok'); await loadPercent(); }
+    catch (e) { pctMsg(e.message, 'err'); }
+  }
+
+  async function borrarFila(row) {
+    const id = row.dataset.id;
+    const p = pcts.find(x => x.id === id);
+    if (!confirm('¿Eliminar el porcentaje "' + (p ? p.name : '') + '"?')) return;
+    pctMsg('Eliminando…');
+    try {
+      const r = await fetch('/api/porcentaje?id=' + encodeURIComponent(id), { method: 'DELETE', headers: deps.authHeaders() });
       const d = await r.json().catch(() => null);
-      if (!r.ok || !d || d.error) throw new Error((d && d.error) || 'No se pudo guardar');
-      if (inp) inp.value = d.percent;
-      pctMsg('Guardado ✓', 'ok');
-    } catch (e) {
-      pctMsg(e.message, 'err');
-    } finally {
-      if (btn) btn.disabled = false;
-    }
+      if (!r.ok || !d || d.error) throw new Error((d && d.error) || 'No se pudo eliminar');
+      pctMsg('Eliminado ✓', 'ok');
+      await loadPercent();
+    } catch (e) { pctMsg(e.message, 'err'); }
   }
 
   async function guardar() {
@@ -191,11 +232,24 @@
     $('#agBox').addEventListener('change', e => {
       if (e.target.id === 'agNum') { numSel = e.target.value; msg(''); render(); }
     });
-    // Porcentaje (solo super_admin; la tarjeta puede estar oculta)
-    const pctSave = $('#pctSave');
-    if (pctSave) pctSave.addEventListener('click', guardarPercent);
-    const pctInput = $('#pctInput');
-    if (pctInput) pctInput.addEventListener('keydown', e => { if (e.key === 'Enter') guardarPercent(); });
+    // Porcentajes (solo super_admin; la tarjeta puede estar oculta)
+    const addBtn = $('#pctAdd');
+    if (addBtn) addBtn.addEventListener('click', añadirPct);
+    const newVal = $('#pctNewVal');
+    if (newVal) newVal.addEventListener('keydown', e => { if (e.key === 'Enter') añadirPct(); });
+    const list = $('#pctList');
+    if (list) {
+      list.addEventListener('click', e => {
+        const b = e.target.closest('[data-act]');
+        if (!b) return;
+        const row = b.closest('.pct__item');
+        if (b.dataset.act === 'save') guardarFila(row);
+        else if (b.dataset.act === 'del') borrarFila(row);
+      });
+      list.addEventListener('keydown', e => {
+        if (e.key === 'Enter' && e.target.classList.contains('pct__item-val')) guardarFila(e.target.closest('.pct__item'));
+      });
+    }
   }
 
   window.Settings = { init, load };

@@ -80,8 +80,14 @@ app.get('/api/recordings/proxy', require('./services/recordingProxy').handle);
 // GET ABIERTO a propósito: lo consulta un sistema externo sin sesión.
 // Va ANTES del gate de plataforma para que no exija login.
 const settingsStore = require('./settingsStore');
-app.get('/api/porcentaje', wrap(async (_req, res) => {
-  res.json({ percent: await settingsStore.getPercent() });
+app.get('/api/porcentaje', wrap(async (req, res) => {
+  const name = req.query.name != null ? String(req.query.name) : '';
+  if (name) {                                   // ?name=... → un porcentaje concreto
+    const p = await settingsStore.getByName(name);
+    if (!p) return res.status(404).json({ error: 'No existe ese porcentaje', name });
+    return res.json({ name: p.name, slug: p.slug, percent: p.percent });
+  }
+  res.json({ percentages: await settingsStore.list() });   // sin nombre → todos
 }));
 
 // ── Gate de plataforma: todo lo demás exige acceso a 'cotizaciones' ──────────
@@ -119,13 +125,24 @@ app.use('/api', require('./quotes'));         // cotizaciones (MSSQL) + PDF (Sup
 app.use('/api', require('./calls'));          // llamadas del agente de voz + webhook n8n
 app.use('/api', require('./agents'));         // ajustes: qué agente atiende las llamadas
 
-// Fijar el porcentaje: SOLO super_admin. Va detrás del gate (ya exige sesión y
-// plataforma 'cotizaciones'); aquí además comprobamos el rol.
+// Crear / editar un porcentaje con nombre: SOLO super_admin. Detrás del gate.
 app.post('/api/porcentaje', wrap(async (req, res) => {
-  if (!esSuper(req)) return res.status(403).json({ error: 'Solo el super admin puede cambiar el porcentaje' });
+  if (!esSuper(req)) return res.status(403).json({ error: 'Solo el super admin puede cambiar los porcentajes' });
   const b = req.body || {};
-  const percent = await settingsStore.setPercent(b.percent != null ? b.percent : b.porcentaje, 'super admin');
-  res.json({ ok: true, percent });
+  try {
+    const p = await settingsStore.save(
+      { id: b.id, name: b.name != null ? b.name : b.nombre, percent: b.percent != null ? b.percent : b.porcentaje },
+      'super admin');
+    res.json({ ok: true, percentage: p });
+  } catch (e) { res.status(e.status || 500).json({ error: e.message }); }
+}));
+
+// Borrar un porcentaje por id: SOLO super_admin.
+app.delete('/api/porcentaje', wrap(async (req, res) => {
+  if (!esSuper(req)) return res.status(403).json({ error: 'Solo el super admin puede borrar porcentajes' });
+  const id = req.query.id || (req.body && req.body.id);
+  if (!id) return res.status(400).json({ error: 'Falta el id' });
+  res.json({ ok: await settingsStore.remove(id) });
 }));
 
 // Vigilancia de la secuencia de cotizaciones: avisa a un webhook si hay huecos.
