@@ -80,13 +80,17 @@ async function getModel(agentName, modelName) {
   return { agent: x.agent, agentSlug: x.agent_slug, model: x.name, slug: x.slug, percent: Number(x.percent), coste: Number(x.coste) };
 }
 
-// Mapa de costes por (slug de agente | slug de modelo) y por slug de modelo (más
-// laxo). Lo usa el panel de Mensajes como tarifa de cobro cuando un mensaje no
-// trae coste guardado.
-async function costeMap() {
+// Mapa de configuración por (slug agente | slug modelo) y por slug de modelo
+// (más laxo). Devuelve { percent, coste } de cada modelo. Lo usa el panel de
+// Mensajes para calcular el cobrado = coste_ia × (1 + percent/100).
+async function modelMap() {
   const ags = await listAll();
   const byPair = {}, byModel = {};
-  ags.forEach(a => a.models.forEach(m => { byPair[a.slug + '|' + m.slug] = m.coste; byModel[m.slug] = m.coste; }));
+  ags.forEach(a => a.models.forEach(m => {
+    const v = { percent: m.percent, coste: m.coste };
+    byPair[a.slug + '|' + m.slug] = v;
+    byModel[m.slug] = v;
+  }));
   return { byPair, byModel };
 }
 
@@ -162,4 +166,4 @@ async function removeModel(id) {
   return !!r.rows[0];
 }
 
-module.exports = { listAll, getAgent, getModel, costeMap, saveAgent, removeAgent, saveModel, removeModel, slugify };
+module.exports = { listAll, getAgent, getModel, modelMap, saveAgent, removeAgent, saveModel, removeModel, slugify };

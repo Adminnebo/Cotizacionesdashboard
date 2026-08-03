@@ -306,7 +306,7 @@ app.get('/api/messages', optionalAuth, wrap(async (req, res) => {
   const paramsTot = params.slice();
   const outIdx = paramsTot.push(MSG_COST_OUT);
 
-  const [rows, totalR] = await Promise.all([
+  const [rows, countR, groupedR] = await Promise.all([
     q(`WITH seq AS (
          SELECT id, conversation_id, direction, type, text, status, created_at, execution_ms, model, cost_usd, charged_usd, sent_by, channel,
                 LAG(direction)  OVER w AS prev_dir,
@@ -326,41 +326,61 @@ app.get('/api/messages', optionalAuth, wrap(async (req, res) => {
        WHERE s.direction='out' AND s.prev_dir='in'${searchClause}${senderClause}${channelClause}
        ORDER BY s.created_at DESC, s.id DESC
        LIMIT ${limit} OFFSET ${offset}`, params),
-    // Total del rango: conteo + sumas de coste/cobro (solo filas con coste real,
-    // igual base que el % por mensaje) para el recap de ganancia del super_admin.
+    // Total de pares del rango (para la paginación).
     q(`WITH seq AS (
-         SELECT conversation_id, direction, text, sent_by, channel, cost_usd, charged_usd,
-                LAG(direction) OVER w AS prev_dir,
-                LAG(text)      OVER w AS prev_text
+         SELECT conversation_id, direction, text, channel, sent_by,
+                LAG(direction) OVER w AS prev_dir, LAG(text) OVER w AS prev_text
          FROM messages WHERE created_at >= $1 AND created_at < $2
          WINDOW w AS (PARTITION BY conversation_id ORDER BY created_at, id))
-       SELECT count(*)::int AS n,
-              COALESCE(SUM(s.cost_usd) FILTER (WHERE s.cost_usd > 0), 0) AS sum_cost,
-              COALESCE(SUM(COALESCE(s.charged_usd, $${outIdx})) FILTER (WHERE s.cost_usd > 0), 0) AS sum_charged
+       SELECT count(*)::int AS n FROM seq s
+       JOIN conversations cv ON cv.id = s.conversation_id
+       JOIN contacts c ON c.id = cv.contact_id
+       WHERE s.direction='out' AND s.prev_dir='in'${searchClause}${senderClause}${channelClause}`, params),
+    // Coste agrupado por (agente, modelo) para derivar el cobrado con el % de cada
+    // modelo en JS (recap de ganancia del super_admin). Solo filas con coste real.
+    q(`WITH seq AS (
+         SELECT conversation_id, direction, text, channel, sent_by, model, cost_usd, charged_usd,
+                LAG(direction) OVER w AS prev_dir, LAG(text) OVER w AS prev_text
+         FROM messages WHERE created_at >= $1 AND created_at < $2
+         WINDOW w AS (PARTITION BY conversation_id ORDER BY created_at, id))
+       SELECT s.sent_by, s.model,
+              COALESCE(SUM(s.cost_usd), 0) AS c,
+              COALESCE(SUM(COALESCE(s.charged_usd, $${outIdx})), 0) AS ch
        FROM seq s
        JOIN conversations cv ON cv.id = s.conversation_id
        JOIN contacts c ON c.id = cv.contact_id
-       WHERE s.direction='out' AND s.prev_dir='in'${searchClause}${senderClause}${channelClause}`, paramsTot)
+       WHERE s.direction='out' AND s.prev_dir='in' AND s.cost_usd > 0${searchClause}${senderClause}${channelClause}
+       GROUP BY s.sent_by, s.model`, paramsTot)
   ]);
 
-  const tr = totalR.rows[0] || {};
-  // Tarifas de cobro configuradas por modelo (Ajustes). Se usan como coste cuando
-  // un mensaje NO trae charged_usd guardado; los que sí lo traen no se tocan.
-  const costes = await settingsStore.costeMap();
+  // Config por modelo (Ajustes): % y coste. Blindado — si el sistema de config
+  // fallara, los mensajes se siguen mostrando con el fallback, nunca se rompe.
+  let modelos = { byPair: {}, byModel: {} };
+  try { modelos = await settingsStore.modelMap(); } catch (e) { console.error('modelMap', e.message); }
   const slugDe = settingsStore.slugify;
-  const tarifaDe = m => {
-    const pair = costes.byPair[slugDe(m.sent_by) + '|' + slugDe(m.model)];
-    if (pair != null) return pair;
-    const porModelo = costes.byModel[slugDe(m.model)];
-    return porModelo != null ? porModelo : MSG_COST_OUT;
+  const cfgDe = m => modelos.byPair[slugDe(m.sent_by) + '|' + slugDe(m.model)] || modelos.byModel[slugDe(m.model)] || null;
+  // Cobrado por mensaje = coste_ia × (1 + %/100) del modelo que se ejecutó.
+  // Si no hay coste_ia o no hay % configurado: usa el cobrado guardado, luego el
+  // coste configurado del modelo, y por último la tarifa por defecto.
+  const cobradoDe = m => {
+    const cfg = cfgDe(m);
+    if (m.cost_usd != null && cfg && cfg.percent != null) return Number(m.cost_usd) * (1 + Number(cfg.percent) / 100);
+    if (m.charged_usd != null) return Number(m.charged_usd);
+    return (cfg && cfg.coste != null) ? Number(cfg.coste) : MSG_COST_OUT;
   };
 
-  const total = tr.n || 0;
-  // Recap de ganancia/pérdida del rango completo (solo super_admin).
+  const total = (countR.rows[0] && countR.rows[0].n) || 0;
+  // Recap de ganancia/pérdida del rango completo (solo super_admin): mismo cálculo
+  // que por fila, agregado por (agente, modelo).
   let marginRecap = null;
   if (canSeeMargin) {
-    const sumCost = Number(tr.sum_cost) || 0;
-    const sumCharged = Number(tr.sum_charged) || 0;
+    let sumCost = 0, sumCharged = 0;
+    for (const g of groupedR.rows) {
+      const c = Number(g.c) || 0;
+      const cfg = modelos.byPair[slugDe(g.sent_by) + '|' + slugDe(g.model)] || modelos.byModel[slugDe(g.model)] || null;
+      sumCost += c;
+      sumCharged += (cfg && cfg.percent != null) ? c * (1 + Number(cfg.percent) / 100) : (Number(g.ch) || 0);
+    }
     marginRecap = {
       cost: sumCost,
       charged: sumCharged,
@@ -373,8 +393,8 @@ app.get('/api/messages', optionalAuth, wrap(async (req, res) => {
     cost: { out: MSG_COST_OUT, in: MSG_COST_IN, currency: COST_CCY },
     items: rows.rows.map(m => {
       // Lo cobrado al cliente vs. lo que nos costó (IA). Ganancia = cobrado - coste.
-      // Si no hay charged_usd guardado, se usa la tarifa configurada del modelo.
-      const charged = m.charged_usd != null ? Number(m.charged_usd) : tarifaDe(m);
+      // Cobrado = coste_ia × (1 + %/100) del modelo (con fallbacks).
+      const charged = cobradoDe(m);
       const ourCost = m.cost_usd != null ? Number(m.cost_usd) : null;
       // % sobre el coste: +40% gana, -15% pierde. Sin coste (>0) no es calculable.
       let marginPct = null;
