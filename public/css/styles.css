@@ -115,7 +115,12 @@ body { font-family: Inter, system-ui, sans-serif; background: var(--surface-0); 
 .md-list { display: flex; flex-direction: column; gap: 7px; }
 .md-item { display: flex; align-items: center; gap: 10px; padding: 7px 10px; border: 1px solid var(--border); border-radius: 9px; background: var(--input-bg, #14161b); }
 .md-name { flex: 1; min-width: 0; font-weight: 600; font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.md-add { display: flex; align-items: center; gap: 9px; margin-top: 9px; padding-top: 10px; border-top: 1px dashed var(--border); }
+.md-add { display: flex; align-items: center; gap: 9px; margin-top: 9px; padding-top: 10px; border-top: 1px dashed var(--border); flex-wrap: wrap; }
+.md-add .pct__name { flex: 1 1 140px; }
+.md-field { display: inline-flex; align-items: center; gap: 5px; }
+.md-field .pct__input { width: 92px; }
+.md-coste, .md-new-coste { width: 92px; }
+.md-cur { font-size: 14px; font-weight: 700; color: var(--text-muted); }
 .msgs__human { color: var(--sent); font-weight: 600; }
 .kpi__label { font-size: 13px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: .03em; display: flex; align-items: center; justify-content: center; gap: 7px; }
 .kpi__dot { width: 9px; height: 9px; border-radius: 50%; }

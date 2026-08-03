@@ -156,7 +156,8 @@ app.post('/api/porcentaje/modelo', wrap(async (req, res) => {
     const m = await settingsStore.saveModel({
       id: b.id, agentId: b.agentId != null ? b.agentId : b.agent_id,
       name: b.name != null ? b.name : b.nombre,
-      percent: b.percent != null ? b.percent : b.porcentaje
+      percent: b.percent != null ? b.percent : b.porcentaje,
+      coste: b.coste != null ? b.coste : b.cost
     });
     res.json({ ok: true, model: m });
   } catch (e) { res.status(e.status || 500).json({ error: e.message }); }
@@ -343,6 +344,17 @@ app.get('/api/messages', optionalAuth, wrap(async (req, res) => {
   ]);
 
   const tr = totalR.rows[0] || {};
+  // Tarifas de cobro configuradas por modelo (Ajustes). Se usan como coste cuando
+  // un mensaje NO trae charged_usd guardado; los que sí lo traen no se tocan.
+  const costes = await settingsStore.costeMap();
+  const slugDe = settingsStore.slugify;
+  const tarifaDe = m => {
+    const pair = costes.byPair[slugDe(m.sent_by) + '|' + slugDe(m.model)];
+    if (pair != null) return pair;
+    const porModelo = costes.byModel[slugDe(m.model)];
+    return porModelo != null ? porModelo : MSG_COST_OUT;
+  };
+
   const total = tr.n || 0;
   // Recap de ganancia/pérdida del rango completo (solo super_admin).
   let marginRecap = null;
@@ -361,7 +373,8 @@ app.get('/api/messages', optionalAuth, wrap(async (req, res) => {
     cost: { out: MSG_COST_OUT, in: MSG_COST_IN, currency: COST_CCY },
     items: rows.rows.map(m => {
       // Lo cobrado al cliente vs. lo que nos costó (IA). Ganancia = cobrado - coste.
-      const charged = m.charged_usd != null ? Number(m.charged_usd) : MSG_COST_OUT;
+      // Si no hay charged_usd guardado, se usa la tarifa configurada del modelo.
+      const charged = m.charged_usd != null ? Number(m.charged_usd) : tarifaDe(m);
       const ourCost = m.cost_usd != null ? Number(m.cost_usd) : null;
       // % sobre el coste: +40% gana, -15% pierde. Sin coste (>0) no es calculable.
       let marginPct = null;

@@ -24,10 +24,13 @@ function ensure() {
       name TEXT NOT NULL,
       slug TEXT,
       percent NUMERIC NOT NULL DEFAULT 0,
+      coste NUMERIC NOT NULL DEFAULT 0.03,
       created_at TIMESTAMPTZ DEFAULT now(),
       updated_at TIMESTAMPTZ DEFAULT now(),
       UNIQUE (agent_id, slug)
     )`);
+    // 'coste' = tarifa de cobro por mensaje de ese modelo (antes fijo en 0.03).
+    await q(`ALTER TABLE pct_models ADD COLUMN IF NOT EXISTS coste NUMERIC NOT NULL DEFAULT 0.03`);
   })().catch(e => { ready = null; throw e; });
   return ready;
 }
@@ -39,13 +42,13 @@ function slugify(name) {
     .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
 }
 const err = (msg, status) => { const e = new Error(msg); e.status = status || 400; return e; };
-const shapeModel = m => ({ id: String(m.id), name: m.name, slug: m.slug, percent: Number(m.percent) });
+const shapeModel = m => ({ id: String(m.id), name: m.name, slug: m.slug, percent: Number(m.percent), coste: Number(m.coste) });
 
 // Todos los agentes con sus modelos anidados.
 async function listAll() {
   await ensure();
   const a = await q(`SELECT id, name, slug FROM pct_agents ORDER BY name ASC`);
-  const m = await q(`SELECT id, agent_id, name, slug, percent FROM pct_models ORDER BY name ASC`);
+  const m = await q(`SELECT id, agent_id, name, slug, percent, coste FROM pct_models ORDER BY name ASC`);
   const porAgente = new Map();
   m.rows.forEach(r => { const k = String(r.agent_id); if (!porAgente.has(k)) porAgente.set(k, []); porAgente.get(k).push(shapeModel(r)); });
   return a.rows.map(ag => ({ id: String(ag.id), name: ag.name, slug: ag.slug, models: porAgente.get(String(ag.id)) || [] }));
@@ -59,7 +62,7 @@ async function getAgent(name) {
   const a = await q(`SELECT id, name, slug FROM pct_agents WHERE slug=$1`, [s]);
   if (!a.rows[0]) return null;
   const ag = a.rows[0];
-  const m = await q(`SELECT id, name, slug, percent FROM pct_models WHERE agent_id=$1 ORDER BY name ASC`, [ag.id]);
+  const m = await q(`SELECT id, name, slug, percent, coste FROM pct_models WHERE agent_id=$1 ORDER BY name ASC`, [ag.id]);
   return { id: String(ag.id), name: ag.name, slug: ag.slug, models: m.rows.map(shapeModel) };
 }
 
@@ -69,12 +72,22 @@ async function getModel(agentName, modelName) {
   const as = slugify(agentName), ms = slugify(modelName);
   if (!as || !ms) return null;
   const r = await q(
-    `SELECT m.id, m.name, m.slug, m.percent, a.name AS agent, a.slug AS agent_slug
+    `SELECT m.id, m.name, m.slug, m.percent, m.coste, a.name AS agent, a.slug AS agent_slug
      FROM pct_models m JOIN pct_agents a ON a.id = m.agent_id
      WHERE a.slug=$1 AND m.slug=$2`, [as, ms]);
   if (!r.rows[0]) return null;
   const x = r.rows[0];
-  return { agent: x.agent, agentSlug: x.agent_slug, model: x.name, slug: x.slug, percent: Number(x.percent) };
+  return { agent: x.agent, agentSlug: x.agent_slug, model: x.name, slug: x.slug, percent: Number(x.percent), coste: Number(x.coste) };
+}
+
+// Mapa de costes por (slug de agente | slug de modelo) y por slug de modelo (más
+// laxo). Lo usa el panel de Mensajes como tarifa de cobro cuando un mensaje no
+// trae coste guardado.
+async function costeMap() {
+  const ags = await listAll();
+  const byPair = {}, byModel = {};
+  ags.forEach(a => a.models.forEach(m => { byPair[a.slug + '|' + m.slug] = m.coste; byModel[m.slug] = m.coste; }));
+  return { byPair, byModel };
 }
 
 // ---- Agentes ----
@@ -103,24 +116,39 @@ async function removeAgent(id) {
 }
 
 // ---- Modelos (dentro de un agente) ----
-async function saveModel({ id, agentId, name, percent }) {
+// `coste` es opcional: si no viene, se mantiene el que tenga (o el default 0.03).
+async function saveModel({ id, agentId, name, percent, coste }) {
   await ensure();
   const nombre = String(name || '').trim();
   if (!nombre || slugify(nombre) === '') throw err('El nombre del modelo es obligatorio');
   const n = Number(percent);
   if (!Number.isFinite(n) || n < 0) throw err('Porcentaje inválido');
+  const tieneCoste = coste != null && coste !== '';
+  const c = Number(coste);
+  if (tieneCoste && (!Number.isFinite(c) || c < 0)) throw err('Coste inválido');
   const slug = slugify(nombre), valor = Math.round(n * 100) / 100;
+  const costeVal = tieneCoste ? Math.round(c * 1e6) / 1e6 : null;   // hasta 6 decimales
   try {
     if (id) {
-      const r = await q(`UPDATE pct_models SET name=$2, slug=$3, percent=$4, updated_at=now() WHERE id=$1 RETURNING id,name,slug,percent`, [id, nombre, slug, valor]);
+      // Con coste → actualiza también el coste; sin coste → deja el que estaba.
+      const r = costeVal != null
+        ? await q(`UPDATE pct_models SET name=$2, slug=$3, percent=$4, coste=$5, updated_at=now() WHERE id=$1 RETURNING id,name,slug,percent,coste`, [id, nombre, slug, valor, costeVal])
+        : await q(`UPDATE pct_models SET name=$2, slug=$3, percent=$4, updated_at=now() WHERE id=$1 RETURNING id,name,slug,percent,coste`, [id, nombre, slug, valor]);
       if (!r.rows[0]) throw err('No existe ese modelo', 404);
       return shapeModel(r.rows[0]);
     }
     if (!agentId) throw err('Falta el agente');
+    // Insert: si no mandan coste, la columna aplica su default (0.03).
+    const cols = costeVal != null ? '(agent_id, name, slug, percent, coste)' : '(agent_id, name, slug, percent)';
+    const vals = costeVal != null ? '($1,$2,$3,$4,$5)' : '($1,$2,$3,$4)';
+    const upd = costeVal != null
+      ? 'name=EXCLUDED.name, percent=EXCLUDED.percent, coste=EXCLUDED.coste, updated_at=now()'
+      : 'name=EXCLUDED.name, percent=EXCLUDED.percent, updated_at=now()';
+    const params = costeVal != null ? [agentId, nombre, slug, valor, costeVal] : [agentId, nombre, slug, valor];
     const r = await q(
-      `INSERT INTO pct_models (agent_id, name, slug, percent) VALUES ($1,$2,$3,$4)
-       ON CONFLICT (agent_id, slug) DO UPDATE SET name=EXCLUDED.name, percent=EXCLUDED.percent, updated_at=now()
-       RETURNING id,name,slug,percent`, [agentId, nombre, slug, valor]);
+      `INSERT INTO pct_models ${cols} VALUES ${vals}
+       ON CONFLICT (agent_id, slug) DO UPDATE SET ${upd}
+       RETURNING id,name,slug,percent,coste`, params);
     return shapeModel(r.rows[0]);
   } catch (e) {
     if (e.status) throw e;
@@ -134,4 +162,4 @@ async function removeModel(id) {
   return !!r.rows[0];
 }
 
-module.exports = { listAll, getAgent, getModel, saveAgent, removeAgent, saveModel, removeModel, slugify };
+module.exports = { listAll, getAgent, getModel, costeMap, saveAgent, removeAgent, saveModel, removeModel, slugify };
