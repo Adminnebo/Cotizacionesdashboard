@@ -43,7 +43,14 @@ body { font-family: Inter, system-ui, sans-serif; background: var(--surface-0); 
 .top__logo { width: 46px; height: 46px; border-radius: 12px; background: var(--surface-0); display: grid; place-items: center; font-size: 23px; }
 .top h1 { font-size: 22px; font-weight: 800; letter-spacing: -.01em; }
 .top__sub { font-size: 12.5px; color: var(--text-muted); margin-top: 1px; }
-.top__actions { display: flex; align-items: center; gap: 10px; }
+.top__actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+/* conmutador entre plataformas */
+.platsw { display: inline-flex; gap: 4px; background: var(--surface-0); border: 1px solid var(--border); border-radius: 10px; padding: 3px; }
+.platsw__it { display: inline-flex; align-items: center; gap: 6px; padding: 6px 11px; font-size: 12.5px; font-weight: 600; color: var(--text-secondary); border-radius: 7px; text-decoration: none; cursor: pointer; white-space: nowrap; }
+.platsw__it:hover { background: var(--surface-1); color: var(--text-primary); }
+.platsw__it--on { background: var(--accent, #4c8bf5); color: #fff; cursor: default; }
+.platsw__it--on:hover { background: var(--accent, #4c8bf5); color: #fff; }
+.platsw__ic { font-size: 14px; }
 .segmented { display: inline-flex; background: var(--surface-0); border: 1px solid var(--border); border-radius: 10px; padding: 3px; }
 .seg { padding: 6px 12px; font-size: 12.5px; font-weight: 600; color: var(--text-secondary); border-radius: 7px; cursor: pointer; border: none; background: none; }
 .seg--active { background: var(--surface-1); color: var(--text-primary); box-shadow: 0 1px 2px rgba(0,0,0,.08); }

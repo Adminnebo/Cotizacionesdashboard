@@ -9,6 +9,23 @@
   let logsPage = 1, logsData = null;
   const ACTION_LABEL = { bot_off: '🔴 Apagó el bot', bot_on: '🟢 Encendió el bot', conv_close: '🔒 Cerró conversación', conv_open: '🔓 Abrió conversación', conv_delete: '🗑️ Eliminó conversación', no_reply: '⏰ Entrante sin respuesta' };
 
+  // Conmutador entre las 3 plataformas (se rellena tras conocer el acceso del usuario).
+  const PLATS = [
+    { key: 'inbox', label: 'Conversaciones', icon: '💬', url: 'https://whatsapp.neboaiconsulting.com' },
+    { key: 'cotizaciones', label: 'Cotizaciones', icon: '📄', url: 'https://panelcotizaciones.neboaiconsulting.com' },
+    { key: 'cobranzas', label: 'Cobranzas', icon: '💰', url: 'https://panelcobranzas.neboaiconsulting.com' }
+  ];
+  function renderPlatSwitcher(current, allowed) {
+    const box = $('#platsw'); if (!box) return;
+    const puede = k => !Array.isArray(allowed) || !allowed.length || allowed.includes(k);
+    box.innerHTML = PLATS.filter(p => p.key === current || puede(p.key)).map(p => {
+      const act = p.key === current;
+      return act
+        ? `<span class="platsw__it platsw__it--on" title="Estás aquí"><span class="platsw__ic">${p.icon}</span>${p.label}</span>`
+        : `<a class="platsw__it" href="${p.url}" title="Ir a ${p.label}"><span class="platsw__ic">${p.icon}</span>${p.label}</a>`;
+    }).join('');
+  }
+
   // Construye los parámetros de rango: fechas específicas o preset de días.
   function rangeParams() {
     const p = new URLSearchParams();
@@ -86,6 +103,7 @@
         const plats = me.platforms || [];
         if (Array.isArray(plats) && plats.length && !plats.includes('cotizaciones')) return sinAcceso(plats);
         window.NEBO_ROLE = me.role || null;   // lo usa Ajustes para el bloque de Porcentaje
+        renderPlatSwitcher('cotizaciones', plats);   // conmutador de plataformas
         if (usersBtn && ['admin', 'super_admin'].includes(me.role)) usersBtn.hidden = false;
         // Permisos granulares: oculta las pestañas que el agente no tiene y, si la
         // activa quedó oculta, salta a la primera visible.
@@ -332,6 +350,7 @@
   function init() {
     let t = 'light'; try { t = localStorage.getItem('an_theme') || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'); } catch (_) {}
     applyTheme(t);
+    renderPlatSwitcher('cotizaciones', null);   // por defecto muestra las 3; /me lo refina
     if (window.Pipeline) Pipeline.init();
     if (window.Quotes) Quotes.init({ rangeParams, authHeaders });
     if (window.Calls) Calls.init({ rangeParams, authHeaders });
