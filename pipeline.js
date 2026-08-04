@@ -15,7 +15,19 @@ const router = express.Router();
 
 const wrap = fn => (req, res) => Promise.resolve(fn(req, res)).catch(e => { console.error(req.path, e.message); res.status(500).json({ error: e.message }); });
 const CHANNELS = ['whatsapp', 'instagram', 'facebook', 'pagina_web'];
-const normChannel = c => { const k = String(c || '').trim().toLowerCase(); return CHANNELS.includes(k) ? k : null; };
+// Alias de canal: acepta valores crudos de las fuentes (ig, fb, live_chat, web…)
+// y los normaliza a los 4 canales soportados. live_chat/web => pagina_web.
+const CHAN_ALIAS = {
+  wa: 'whatsapp', whatsapp: 'whatsapp',
+  ig: 'instagram', instagram: 'instagram',
+  fb: 'facebook', facebook: 'facebook', messenger: 'facebook',
+  pagina_web: 'pagina_web', 'pagina web': 'pagina_web', web: 'pagina_web',
+  live_chat: 'pagina_web', livechat: 'pagina_web', 'live chat': 'pagina_web', chat: 'pagina_web'
+};
+const normChannel = c => {
+  const k = String(c || '').trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  return CHAN_ALIAS[k] || (CHANNELS.includes(k) ? k : null);
+};
 // Normaliza para comparar nombres de etapa: minúsculas, sin acentos ni espacios extra.
 const normName = s => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ').trim();
 
@@ -27,6 +39,7 @@ const DEFAULT_STAGES = [
   { name: 'Cotización Enviada Agente de WhatsApp', color: '#10b981' },
   { name: 'Cotización Enviada vía Instagram', color: '#d62976' },
   { name: 'Cotización Enviada vía Facebook', color: '#1877f2' },
+  { name: 'Cotización Enviada vía Página web', color: '#0ea5e9' },
   { name: 'Derivar a humano', color: '#ef4444' }
 ];
 
