@@ -125,7 +125,7 @@
         <td class="quo__exp"><span class="quo__caret">${isOpen ? '▾' : '▸'}</span></td>
         <td class="nowrap">${fmtDate(x.at)}</td>
         <td>${x.agent ? esc(x.agent) : '<span class="dim">—</span>'}</td>
-        <td class="nowrap">${x.phone ? esc(x.phone) : '<span class="dim">—</span>'}</td>
+        <td class="nowrap">${x.phone ? esc(x.phone) : '<span class="dim">—</span>'}${x.contactName ? `<div class="msgs__name">${esc(x.contactName)}</div>` : ''}</td>
         <td class="num nowrap">${fmtDur(x.durationSecs)}</td>
         <td class="num">${fmtMoney(x.cost)}</td>
         <td class="nowrap">${x.recordingUrl ? '🎧 Sí' : '<span class="dim">—</span>'}</td>

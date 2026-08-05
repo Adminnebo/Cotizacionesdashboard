@@ -20,6 +20,10 @@ const esSuper = req => !authCfg || req.role === 'super_admin';
 
 const app = express();
 
+// ── Seguridad: cabeceras + rate limit ────────────────────────────────────────
+const { hardening, rateLimit } = require('./security');
+hardening(app);
+
 // ── CORS para la app móvil ───────────────────────────────────────────────────
 // La app de Capacitor no se sirve desde este dominio: iOS llega como
 // capacitor://localhost y Android como https://localhost. Sin esto el WebView
@@ -50,6 +54,13 @@ app.use((req, res, next) => {
 });
 
 app.use(express.json({ limit: '2mb' }));   // necesario para POST/PATCH (crear usuarios)
+
+// Rate limit por IP: endpoints de máquina (webhooks n8n, GET /porcentaje, audio,
+// health) con límite alto; el resto (panel/usuarios) más estricto. Configurable.
+const esMaquinaAn = req => /^\/(porcentaje|recordings|hooks|calls\/hook|health|auth\/config)/.test(req.path);
+const RL_WIN_AN = Number(process.env.RATE_LIMIT_WINDOW_MS || 60000);
+app.use('/api', rateLimit({ windowMs: RL_WIN_AN, max: Number(process.env.RATE_LIMIT_MACHINE || 1200), skip: req => !esMaquinaAn(req) }));
+app.use('/api', rateLimit({ windowMs: RL_WIN_AN, max: Number(process.env.RATE_LIMIT_USER || 300), skip: esMaquinaAn }));
 const PORT = process.env.PORT || 8080;
 const TZ = process.env.TZ_DISPLAY || 'America/Santo_Domingo';
 
