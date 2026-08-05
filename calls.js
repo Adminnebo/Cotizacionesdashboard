@@ -38,6 +38,9 @@ function ensureSchema() {
     )`);
     // Detalle de coste en texto libre (desglose), visible solo para super_admin.
     await q(`ALTER TABLE calls ADD COLUMN IF NOT EXISTS cost_detail TEXT`);
+    // Persona de la llamada: nombre + id (ej. id de contacto en GHL/CRM).
+    await q(`ALTER TABLE calls ADD COLUMN IF NOT EXISTS contact_name TEXT`);
+    await q(`ALTER TABLE calls ADD COLUMN IF NOT EXISTS contact_id TEXT`);
     await q(`CREATE UNIQUE INDEX IF NOT EXISTS calls_external_id_uq ON calls(external_id) WHERE external_id IS NOT NULL`);
     await q(`CREATE INDEX IF NOT EXISTS calls_created_idx ON calls(created_at)`);
   })().catch(e => { schemaReady = null; throw e; });
@@ -77,6 +80,8 @@ const shapeCall = (c, { full = false, super: canSuper = false } = {}) => ({
   id: String(c.id),
   agent: c.agent || null,
   phone: c.phone || null,
+  contactName: c.contact_name || null,
+  contactId: c.contact_id || null,
   transcript: full ? (c.transcript || '') : undefined,
   transcriptPreview: c.transcript ? (c.transcript.length > 160 ? c.transcript.slice(0, 160) + '…' : c.transcript) : null,
   hasTranscript: !!c.transcript,
@@ -91,14 +96,23 @@ const shapeCall = (c, { full = false, super: canSuper = false } = {}) => ({
 });
 
 // ---------- Ingesta (n8n) ----------
-// POST /api/calls/hook
-// body: { agent, phone, transcript, recordingUrl|recording, duration|durationSecs, cost, externalId?, at?, meta? }
+// POST /api/calls/hook   (header: X-Api-Key: <N8N_API_KEY>)
+// body: { phone, contactName?, contactId?, agent?, transcript?, recordingUrl?,
+//         duration?, cost?, costDetail?, externalId?, at?, meta? }
+//   - contactName: nombre de la persona (alias: name, nombre)
+//   - contactId:   id de la persona/contacto (alias: contact_id, ghlContactId)
+//   - duration: segundos, "mm:ss" o "hh:mm:ss"   · cost: número o "$1.50"
 // Idempotente por externalId (si viene): re-postear actualiza en vez de duplicar.
 router.post('/calls/hook', requireApiKey, wrap(async (req, res) => {
   await ensureSchema();
   const b = req.body || {};
   const agent = b.agent != null ? String(b.agent) : null;
   const phone = b.phone != null ? String(b.phone) : (b.numero != null ? String(b.numero) : null);
+  // Persona: nombre e id (acepta varias formas por comodidad desde n8n).
+  const contactNameRaw = b.contactName ?? b.name ?? b.nombre ?? b.clientName ?? null;
+  const contactName = contactNameRaw != null && String(contactNameRaw).trim() !== '' ? String(contactNameRaw).trim() : null;
+  const contactIdRaw = b.contactId ?? b.contact_id ?? b.idContacto ?? b.ghlContactId ?? b.personId ?? null;
+  const contactId = contactIdRaw != null && String(contactIdRaw).trim() !== '' ? String(contactIdRaw).trim() : null;
   const transcript = b.transcript != null ? String(b.transcript) : (b.transcripcion != null ? String(b.transcripcion) : null);
   const recordingUrl = b.recordingUrl || b.recording || b.grabacion || null;
   const durationSecs = parseDuration(b.durationSecs != null ? b.durationSecs : (b.duration != null ? b.duration : b.duracion));
@@ -112,11 +126,13 @@ router.post('/calls/hook', requireApiKey, wrap(async (req, res) => {
 
   if (ext) {
     const upd = await q(
-      `INSERT INTO calls (agent, phone, transcript, recording_url, duration_secs, cost, cost_detail, external_id, meta, created_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9, COALESCE($10, now()))
+      `INSERT INTO calls (agent, phone, contact_name, contact_id, transcript, recording_url, duration_secs, cost, cost_detail, external_id, meta, created_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11, COALESCE($12, now()))
        ON CONFLICT (external_id) WHERE external_id IS NOT NULL DO UPDATE SET
          agent = COALESCE(EXCLUDED.agent, calls.agent),
          phone = COALESCE(EXCLUDED.phone, calls.phone),
+         contact_name = COALESCE(EXCLUDED.contact_name, calls.contact_name),
+         contact_id = COALESCE(EXCLUDED.contact_id, calls.contact_id),
          transcript = COALESCE(EXCLUDED.transcript, calls.transcript),
          recording_url = COALESCE(EXCLUDED.recording_url, calls.recording_url),
          duration_secs = COALESCE(EXCLUDED.duration_secs, calls.duration_secs),
@@ -124,16 +140,16 @@ router.post('/calls/hook', requireApiKey, wrap(async (req, res) => {
          cost_detail = COALESCE(EXCLUDED.cost_detail, calls.cost_detail),
          meta = COALESCE(EXCLUDED.meta, calls.meta)
        RETURNING *`,
-      [agent, phone, transcript, recordingUrl ? String(recordingUrl) : null, durationSecs, cost, costDetail, ext, meta, at]
+      [agent, phone, contactName, contactId, transcript, recordingUrl ? String(recordingUrl) : null, durationSecs, cost, costDetail, ext, meta, at]
     );
     // El emisor es n8n (API key), le devolvemos el registro completo.
     return res.json({ ok: true, call: shapeCall(upd.rows[0], { full: true, super: true }) });
   }
 
   const ins = await q(
-    `INSERT INTO calls (agent, phone, transcript, recording_url, duration_secs, cost, cost_detail, meta, created_at)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8, COALESCE($9, now())) RETURNING *`,
-    [agent, phone, transcript, recordingUrl ? String(recordingUrl) : null, durationSecs, cost, costDetail, meta, at]
+    `INSERT INTO calls (agent, phone, contact_name, contact_id, transcript, recording_url, duration_secs, cost, cost_detail, meta, created_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10, COALESCE($11, now())) RETURNING *`,
+    [agent, phone, contactName, contactId, transcript, recordingUrl ? String(recordingUrl) : null, durationSecs, cost, costDetail, meta, at]
   );
   res.status(201).json({ ok: true, call: shapeCall(ins.rows[0], { full: true, super: true }) });
 }));
@@ -150,12 +166,12 @@ router.get('/calls', optionalAuth, wrap(async (req, res) => {
   const params = [from, to];
   let where = `created_at >= $1 AND created_at < $2`;
   const search = String(req.query.search || '').trim();
-  if (search) { params.push('%' + search + '%'); where += ` AND (phone ILIKE $${params.length} OR agent ILIKE $${params.length} OR transcript ILIKE $${params.length})`; }
+  if (search) { params.push('%' + search + '%'); where += ` AND (phone ILIKE $${params.length} OR agent ILIKE $${params.length} OR contact_name ILIKE $${params.length} OR contact_id ILIKE $${params.length} OR transcript ILIKE $${params.length})`; }
   const agent = String(req.query.agent || '').trim();
   if (agent) { params.push(agent); where += ` AND agent = $${params.length}`; }
 
   const [rows, agg, byAgent] = await Promise.all([
-    q(`SELECT id, agent, phone, transcript, recording_url, duration_secs, cost, cost_detail, external_id, created_at
+    q(`SELECT id, agent, phone, contact_name, contact_id, transcript, recording_url, duration_secs, cost, cost_detail, external_id, created_at
        FROM calls WHERE ${where} ORDER BY created_at DESC, id DESC LIMIT ${limit} OFFSET ${offset}`, params),
     q(`SELECT count(*)::int AS calls, COALESCE(SUM(cost),0) AS cost,
               COALESCE(SUM(duration_secs),0)::bigint AS dur
