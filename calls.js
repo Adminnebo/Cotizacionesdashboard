@@ -10,13 +10,14 @@ const express = require('express');
 const { q } = require('./db');
 const { optionalAuth, configured: authCfg } = require('./analyticsAuth');
 const { rangeOf } = require('./range');
+const { safeEqual } = require('./security');
 const router = express.Router();
 
 // El detalle de coste (texto libre) es SOLO para super_admin. Sin auth (dev) se
 // muestra para no estorbar el desarrollo local.
 const esSuper = req => !authCfg || req.role === 'super_admin';
 
-const wrap = fn => (req, res) => Promise.resolve(fn(req, res)).catch(e => { console.error(req.path, e.message); res.status(500).json({ error: e.message }); });
+const wrap = fn => (req, res) => Promise.resolve(fn(req, res)).catch(e => { console.error(req.path, e); res.status(500).json({ error: 'Error interno del servidor' }); });
 const COST_CCY = process.env.CALL_COST_CURRENCY || 'USD';
 
 // ---------- Esquema (idempotente) ----------
@@ -71,7 +72,7 @@ function requireApiKey(req, res, next) {
   const key = process.env.N8N_API_KEY || '';
   if (!key) return res.status(503).json({ error: 'N8N_API_KEY no configurado en el servidor' });
   const got = req.headers['x-api-key'] || req.query.api_key || '';
-  if (got !== key) return res.status(401).json({ error: 'API key inválida' });
+  if (!safeEqual(got, key)) return res.status(401).json({ error: 'API key inválida' });
   next();
 }
 

@@ -70,7 +70,7 @@ const MSG_COST_OUT = Number(process.env.MSG_COST_OUT || 0);
 const MSG_COST_IN = Number(process.env.MSG_COST_IN || 0);
 const COST_CCY = process.env.MSG_COST_CURRENCY || 'USD';
 
-const wrap = fn => (req, res) => Promise.resolve(fn(req, res)).catch(e => { console.error(req.path, e.message); res.status(500).json({ error: e.message }); });
+const wrap = fn => (req, res) => Promise.resolve(fn(req, res)).catch(e => { console.error(req.path, e); res.status(500).json({ error: 'Error interno del servidor' }); });
 
 // El rango de fechas (?days / ?from&to) se parsea en ./range.js (compartido).
 

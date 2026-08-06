@@ -13,7 +13,7 @@ const { optionalAuth } = require('./analyticsAuth');
 const { rangeOf } = require('./range');
 const router = express.Router();
 
-const wrap = fn => (req, res) => Promise.resolve(fn(req, res)).catch(e => { console.error(req.path, e.message); res.status(500).json({ error: e.message }); });
+const wrap = fn => (req, res) => Promise.resolve(fn(req, res)).catch(e => { console.error(req.path, e); res.status(500).json({ error: 'Error interno del servidor' }); });
 
 // ---------- PDF en Supabase Storage (bucket público) ----------
 // URL: {SUPABASE_URL}/storage/v1/object/public/{bucket}/{archivo}

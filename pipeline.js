@@ -11,9 +11,10 @@ const express = require('express');
 const { q } = require('./db');
 const { configured, roleForToken } = require('./analyticsAuth');
 const { quoteDetail } = require('./mssql');
+const { safeEqual } = require('./security');
 const router = express.Router();
 
-const wrap = fn => (req, res) => Promise.resolve(fn(req, res)).catch(e => { console.error(req.path, e.message); res.status(500).json({ error: e.message }); });
+const wrap = fn => (req, res) => Promise.resolve(fn(req, res)).catch(e => { console.error(req.path, e); res.status(500).json({ error: 'Error interno del servidor' }); });
 const CHANNELS = ['whatsapp', 'instagram', 'facebook', 'pagina_web'];
 // Alias de canal: acepta valores crudos de las fuentes (ig, fb, live_chat, web…)
 // y los normaliza a los 4 canales soportados. live_chat/web => pagina_web.
@@ -135,7 +136,7 @@ function requireApiKey(req, res, next) {
   const key = process.env.N8N_API_KEY || '';
   if (!key) return res.status(503).json({ error: 'N8N_API_KEY no configurado en el servidor' });
   const got = req.headers['x-api-key'] || req.query.api_key || '';
-  if (got !== key) return res.status(401).json({ error: 'API key inválida' });
+  if (!safeEqual(got, key)) return res.status(401).json({ error: 'API key inválida' });
   next();
 }
 

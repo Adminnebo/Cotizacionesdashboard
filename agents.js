@@ -11,7 +11,7 @@ const { q } = require('./db');
 const { userForToken } = require('./analyticsAuth');
 const router = express.Router();
 
-const wrap = fn => (req, res) => Promise.resolve(fn(req, res)).catch(e => { console.error(req.path, e.message); res.status(500).json({ error: e.message }); });
+const wrap = fn => (req, res) => Promise.resolve(fn(req, res)).catch(e => { console.error(req.path, e); res.status(500).json({ error: 'Error interno del servidor' }); });
 
 const BASE = String(process.env.AGENT_API_BASE || 'https://app.swordaisolutions.com').replace(/\/+$/, '');
 const CLIENT_ID = String(process.env.AGENT_CLIENT_ID || '').trim();
