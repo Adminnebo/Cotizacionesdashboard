@@ -7,6 +7,7 @@
   let customFrom = null, customTo = null;
   let msgPage = 1, msgData = null, msgSearch = '', msgSender = 'all', msgChannel = '';
   let logsPage = 1, logsData = null;
+  let camilaData = null;
   const ACTION_LABEL = { bot_off: '🔴 Apagó el bot', bot_on: '🟢 Encendió el bot', conv_close: '🔒 Cerró conversación', conv_open: '🔓 Abrió conversación', conv_delete: '🗑️ Eliminó conversación', no_reply: '⏰ Entrante sin respuesta' };
 
   // Conmutador entre las 3 plataformas (se rellena tras conocer el acceso del usuario).
@@ -336,12 +337,58 @@
     } catch (e) { $('#logsBody').innerHTML = `<tr><td colspan="5" class="msgs__empty">Error: ${escapeHtml(e.message)}</td></tr>`; }
   }
 
+  // ── Eficiencia de Camila (ejecuciones de n8n) ──────────────────────────────
+  const pctTxt = e => e == null ? '—' : (e * 100).toFixed(1) + '%';
+  // >=95% bien · 85–95% atención · <85% mal (colores de estado).
+  const effClass = e => e == null ? 'na' : e >= 0.95 ? 'good' : e >= 0.85 ? 'warn' : 'bad';
+  const folderChip = f => f === 'WhatsApp' ? 'chip--whatsapp' : 'chip--pagina_web';
+
+  function renderCamila() {
+    const d = camilaData, body = $('#camilaBody'); if (!body || !d) return;
+    const upd = $('#camilaUpdated'), note = $('#camilaNote');
+    if (d.available === false) {
+      body.innerHTML = `<p class="card__note">Métrica no disponible: ${escapeHtml(d.error || 'n8n no configurado')}.</p>`;
+      if (upd) upd.textContent = ''; if (note) note.textContent = ''; return;
+    }
+    const p = d.overall.prod, test = d.overall.test;
+    const cls = effClass(p.eff);
+    const hero = `<div class="camila__hero">
+        <div class="camila__big camila__big--${cls}">${pctTxt(p.eff)}<span class="camila__biglbl">eficiencia · producción</span></div>
+        <div class="camila__tiles">
+          <div class="camila__tile"><span class="camila__tnum">${fmtNum(p.total)}</span><span class="camila__tlbl">ejecuciones</span></div>
+          <div class="camila__tile"><span class="camila__tnum camila__tnum--fail">${fmtNum(p.failed)}</span><span class="camila__tlbl">fallidas</span></div>
+          ${test.total ? `<div class="camila__tile"><span class="camila__tnum">${pctTxt(test.eff)}</span><span class="camila__tlbl">test · ${fmtNum(test.total)} ejec</span></div>` : ''}
+        </div>
+      </div>`;
+    const rows = d.byWorkflow.map(w => {
+      const e = w.prod, c = effClass(e.eff), width = e.eff == null ? 0 : Math.round(e.eff * 100);
+      return `<div class="camila__row">
+        <div class="camila__wf"><span class="chip ${folderChip(w.folder)}">${w.folder}</span><span class="camila__wfname">${escapeHtml(w.name)}</span></div>
+        <div class="camila__bar"><div class="camila__barfill camila__barfill--${c}" style="width:${width}%"></div></div>
+        <div class="camila__nums"><b class="camila__eff--${c}">${pctTxt(e.eff)}</b> <span class="dim">${fmtNum(e.total)} ejec · ${fmtNum(e.failed)} fall.</span></div>
+      </div>`;
+    }).join('');
+    body.innerHTML = hero + `<div class="camila__list">${rows}</div>`;
+    if (upd) upd.textContent = d.updatedAt ? ('actualizado ' + relTime(d.updatedAt)) : (d.syncing ? 'sincronizando…' : '');
+    if (note) note.textContent = (d.warning ? '⚠️ ' + d.warning + '. ' : '') +
+      'Eficiencia = ejecuciones exitosas ÷ terminadas (en n8n), sobre los flujos de procesamiento de Camila (WhatsApp bot + IG/FB/WEB). No incluye el trigger de WhatsApp (eventos de Meta) ni ejecuciones en curso.';
+  }
+
+  async function loadCamila() {
+    try {
+      const res = await fetch('/api/camila-eficiencia?' + rangeParams().toString(), { headers: authHeaders() });
+      camilaData = await res.json();
+    } catch (e) { camilaData = { available: false, error: e.message }; }
+    renderCamila();
+  }
+
   async function load() {
     try {
       const res = await fetch('/api/stats?' + rangeParams().toString(), { headers: authHeaders() });
       current = await res.json();
       render();
       loadLogs();
+      loadCamila();
     } catch (e) { $('#kpis').innerHTML = `<div class="kpi kpi--muted"><div class="kpi__value">Error</div><div class="kpi__sub">${e.message}</div></div>`; }
   }
 

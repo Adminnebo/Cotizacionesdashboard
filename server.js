@@ -118,6 +118,7 @@ const ABIERTAS = [/^\/hooks\//, /^\/calls\/hook$/, /^\/health$/];
 // manda. Lo que no case aquí solo exige la plataforma 'cotizaciones'.
 const PERM_RUTAS = [
   { m: 'GET',   re: /^\/stats$/,                    perm: 'cotizaciones.resumen' },
+  { m: 'GET',   re: /^\/camila-eficiencia$/,        perm: 'cotizaciones.resumen' },
   { m: 'GET',   re: /^\/quotes\/gaps$/,             perm: 'cotizaciones.resumen' },
   { m: 'GET',   re: /^\/messages$/,                 perm: 'cotizaciones.mensajes' },
   { m: 'GET',   re: /^\/logs$/,                     perm: 'cotizaciones.registros' },
@@ -143,6 +144,8 @@ app.use('/api', require('./pipeline'));       // pipeline/oportunidades + webhoo
 app.use('/api', require('./quotes'));         // cotizaciones (MSSQL) + PDF (Supabase)
 app.use('/api', require('./calls'));          // llamadas del agente de voz + webhook n8n
 app.use('/api', require('./agents'));         // ajustes: qué agente atiende las llamadas
+const camila = require('./camila');           // % de eficiencia de Camila (ejecuciones n8n)
+app.use('/api', camila);
 
 // Agentes y modelos: crear/editar/borrar. TODO detrás del gate y SOLO super_admin.
 const soloSuper = (req, res) => { if (esSuper(req)) return true; res.status(403).json({ error: 'Solo el super admin puede cambiar esto' }); return false; };
@@ -471,4 +474,5 @@ app.get('*', (_req, res) => res.sendFile(path.join(__dirname, 'public', 'index.h
 app.listen(PORT, () => {
   console.log(`Analytics escuchando en :${PORT} (TZ ${TZ})`);
   quoteGaps.start();                          // vigila la secuencia de cotizaciones
+  camila.start();                             // espejo incremental de ejecuciones n8n
 });
