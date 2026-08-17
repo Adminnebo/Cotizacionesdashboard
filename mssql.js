@@ -51,27 +51,41 @@ async function quotesStat(from, to) {
 
 // Lista paginada de cotizaciones (cabeceras) en un rango, con búsqueda por
 // cliente / RNC / nº de cotización / teléfono. Devuelve items + total + monto.
-async function quotesList({ from, to, search, limit = 50, offset = 0 }) {
+async function quotesList({ from, to, search, limit = 50, offset = 0, amountMin, amountMax, orderBy }) {
   if (!process.env.MSSQL_SERVER) return { available: false, items: [], total: 0, amount: 0 };
   const p = await getMssql();
   if (!p) return { available: false, items: [], total: 0, amount: 0 };
 
   const s = String(search || '').trim();
+  const hasMin = amountMin != null && amountMin !== '' && !isNaN(Number(amountMin));
+  const hasMax = amountMax != null && amountMax !== '' && !isNaN(Number(amountMax));
   const where = `WHERE FechaRegistro >= @from AND FechaRegistro < @to` +
-    (s ? ` AND (clientenombre LIKE @s OR RNC LIKE @s OR Telefono LIKE @s OR CAST(nfactura AS VARCHAR(32)) LIKE @s)` : '');
+    (s ? ` AND (clientenombre LIKE @s OR RNC LIKE @s OR Telefono LIKE @s OR CAST(nfactura AS VARCHAR(32)) LIKE @s)` : '') +
+    (hasMin ? ` AND total >= @amin` : '') +
+    (hasMax ? ` AND total <= @amax` : '');
   const bind = () => {
     const r = p.request()
       .input('from', sql.DateTime, new Date(from))
       .input('to', sql.DateTime, new Date(to));
     if (s) r.input('s', sql.NVarChar, '%' + s + '%');
+    if (hasMin) r.input('amin', sql.Float, Number(amountMin));
+    if (hasMax) r.input('amax', sql.Float, Number(amountMax));
     return r;
   };
+  // Orden (lista blanca para evitar inyección).
+  const ORDER = {
+    date_desc: 'FechaRegistro DESC, nfactura DESC',
+    date_asc:  'FechaRegistro ASC, nfactura ASC',
+    amount_desc: 'total DESC, nfactura DESC',
+    amount_asc:  'total ASC, nfactura ASC'
+  };
+  const orderClause = ORDER[String(orderBy || '').trim()] || ORDER.date_desc;
 
   const [rows, cnt, prod] = await Promise.all([
     bind().query(`SELECT nfactura, clientenombre, RNC, Telefono, Correo, Ciudad,
                          total, itbis, FechaRegistro, vencimiento, Estatus, Enviado
                   FROM iCotizacionesWebIA ${where}
-                  ORDER BY FechaRegistro DESC, nfactura DESC
+                  ORDER BY ${orderClause}
                   OFFSET ${Number(offset)} ROWS FETCH NEXT ${Number(limit)} ROWS ONLY`),
     bind().query(`SELECT COUNT(*) AS n, COALESCE(SUM(total),0) AS monto FROM iCotizacionesWebIA ${where}`),
     // productos cotizados (líneas) de las cotizaciones que caen en el mismo rango/búsqueda

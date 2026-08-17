@@ -12,6 +12,7 @@
   let deps = null;              // { rangeParams, authHeaders } — los pasa app.js
   let page = 1;
   let search = '';
+  let amountMin = '', amountMax = '', orderBy = '', amtTimer = null;   // filtro de monto + orden
   let data = null;
   const open = new Set();       // nº de cotizaciones desplegadas
   const details = new Map();    // nº -> detalle (cacheado)
@@ -150,6 +151,10 @@
       params.set('page', String(page));
       params.set('limit', '50');
       if (search) params.set('search', search);
+      if (amountMin !== '') params.set('amountMin', amountMin);
+      if (amountMax !== '') params.set('amountMax', amountMax);
+      if (orderBy) params.set('orderBy', orderBy);
+      const clr = $('#quoClear'); if (clr) clr.hidden = !(amountMin !== '' || amountMax !== '' || orderBy || search);
       const res = await fetch('/api/quotes?' + params.toString(), { headers: deps.authHeaders() });
       data = await res.json();
       render();
@@ -212,6 +217,21 @@
     });
 
     $('#quoRefresh').addEventListener('click', () => { details.clear(); load(); });
+
+    // Filtro de monto + orden (por precio o fecha).
+    const amt = () => {
+      amountMin = ($('#quoAmountMin').value || '').trim();
+      amountMax = ($('#quoAmountMax').value || '').trim();
+      clearTimeout(amtTimer); amtTimer = setTimeout(() => { page = 1; open.clear(); load(); }, 450);
+    };
+    $('#quoAmountMin').addEventListener('input', amt);
+    $('#quoAmountMax').addEventListener('input', amt);
+    $('#quoSort').addEventListener('change', e => { orderBy = e.target.value; page = 1; open.clear(); load(); });
+    $('#quoClear').addEventListener('click', () => {
+      amountMin = ''; amountMax = ''; orderBy = ''; search = '';
+      ['#quoAmountMin', '#quoAmountMax', '#quoSort', '#quoSearch'].forEach(id => { const el = $(id); if (el) el.value = ''; });
+      page = 1; open.clear(); load();
+    });
   }
 
   window.Quotes = { init, load, refreshIfVisible };

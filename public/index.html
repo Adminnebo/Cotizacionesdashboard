@@ -201,6 +201,13 @@
             <option value="1">Con cotización</option>
             <option value="0">Sin cotización</option>
           </select>
+          <select id="pipeSort" class="chan-select" aria-label="Orden">
+            <option value="">Orden: manual</option>
+            <option value="amount_desc">Monto: mayor primero</option>
+            <option value="amount_asc">Monto: menor primero</option>
+            <option value="date_desc">Fecha: recientes</option>
+            <option value="date_asc">Fecha: antiguas</option>
+          </select>
           <button class="date-btn date-btn--clear" id="pipeClear" type="button" hidden>✕ Limpiar</button>
           <span class="board__count" id="pipeCount"></span>
         </div>
@@ -216,6 +223,20 @@
           <h2>Cotizaciones</h2>
           <input type="search" id="quoSearch" class="search-input" placeholder="Buscar cliente, RNC, teléfono o nº…" autocomplete="off" />
           <button class="icon-btn" id="quoRefresh" title="Actualizar">↻</button>
+        </div>
+        <div class="board__filters" id="quoFilters">
+          <label class="flt">Monto
+            <input type="number" id="quoAmountMin" class="num-input" placeholder="mín" min="0" step="0.01" />
+            <span class="flt__sep">–</span>
+            <input type="number" id="quoAmountMax" class="num-input" placeholder="máx" min="0" step="0.01" aria-label="Monto máximo" />
+          </label>
+          <select id="quoSort" class="chan-select" aria-label="Orden">
+            <option value="">Orden: fecha (recientes)</option>
+            <option value="amount_desc">Monto: mayor primero</option>
+            <option value="amount_asc">Monto: menor primero</option>
+            <option value="date_asc">Fecha: antiguas</option>
+          </select>
+          <button class="date-btn date-btn--clear" id="quoClear" type="button" hidden>✕ Limpiar</button>
         </div>
         <div class="quo__recap" id="quoRecap"></div>
         <div class="tablewrap">

@@ -37,7 +37,10 @@ router.get('/quotes', optionalAuth, wrap(async (req, res) => {
   const page = Math.max(1, Number(req.query.page) || 1);
   const search = String(req.query.search || '').trim();
 
-  const r = await quotesList({ from, to, search, limit, offset: (page - 1) * limit });
+  const r = await quotesList({
+    from, to, search, limit, offset: (page - 1) * limit,
+    amountMin: req.query.amountMin, amountMax: req.query.amountMax, orderBy: req.query.orderBy
+  });
   if (!r.available) {
     return res.json({ available: false, page, limit, total: 0, amount: 0, products: 0, units: 0, items: [], error: 'MSSQL no configurado' });
   }

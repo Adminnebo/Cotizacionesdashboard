@@ -20,7 +20,7 @@
   let pipeline = null, stages = [], opps = [];
   let filterChannel = '', search = '', searchTimer = null, dragId = null, loaded = false, lastOverCol = null;
   // Filtros adicionales del pipeline.
-  let filterStage = '', dateFrom = '', dateTo = '', amountMin = '', amountMax = '', hasQuote = '', amtTimer = null;
+  let filterStage = '', dateFrom = '', dateTo = '', amountMin = '', amountMax = '', hasQuote = '', amtTimer = null, sortBy = '';
 
   function authHeaders() { return (window.Auth && Auth.currentToken) ? { Authorization: 'Bearer ' + Auth.currentToken } : {}; }
   async function api(url, opts) {
@@ -73,9 +73,18 @@
     if (!stages.length) { wrap.innerHTML = '<p class="board__err">Sin etapas configuradas.</p>'; return; }
     const byStage = {};
     opps.forEach(o => { (byStage[o.stageId] = byStage[o.stageId] || []).push(o); });
-    // Descendente: mayor position arriba. Como cada oportunidad nueva entra con
-    // MAX(position)+1, las más recientes quedan arriba; el arrastre manual manda igual.
-    Object.values(byStage).forEach(list => list.sort((a, b) => b.position - a.position));
+    // Orden dentro de cada columna: manual (position, por defecto) o por monto/fecha.
+    const num = v => Number(v) || 0;
+    const sortFn = (a, b) => {
+      switch (sortBy) {
+        case 'amount_desc': return num(b.quoteAmount) - num(a.quoteAmount);
+        case 'amount_asc':  return num(a.quoteAmount) - num(b.quoteAmount);
+        case 'date_desc':   return new Date(b.createdAt) - new Date(a.createdAt);
+        case 'date_asc':    return new Date(a.createdAt) - new Date(b.createdAt);
+        default:            return b.position - a.position;   // manual (arrastre)
+      }
+    };
+    Object.values(byStage).forEach(list => list.sort(sortFn));
 
     wrap.innerHTML = stages.map(s => {
       const list = byStage[s.id] || [];
@@ -230,7 +239,7 @@
   function closeViewer() { const v = $('#pdfViewer'); if (v) { v.hidden = true; $('#pdfFrame').src = 'about:blank'; } }
 
   // ---- filtros ----
-  const anyFilter = () => !!(filterChannel || search || filterStage || dateFrom || dateTo || amountMin !== '' || amountMax !== '' || hasQuote);
+  const anyFilter = () => !!(filterChannel || search || filterStage || dateFrom || dateTo || amountMin !== '' || amountMax !== '' || hasQuote || sortBy);
   function populateStages() {
     const sel = $('#pipeStage'); if (!sel) return;
     const cur = filterStage;
@@ -246,8 +255,8 @@
     const clr = $('#pipeClear'); if (clr) clr.hidden = !anyFilter();
   }
   function clearFilters() {
-    filterChannel = ''; search = ''; filterStage = ''; dateFrom = ''; dateTo = ''; amountMin = ''; amountMax = ''; hasQuote = '';
-    ['#pipeChan', '#pipeSearch', '#pipeStage', '#pipeFrom', '#pipeTo', '#pipeAmountMin', '#pipeAmountMax', '#pipeHasQuote']
+    filterChannel = ''; search = ''; filterStage = ''; dateFrom = ''; dateTo = ''; amountMin = ''; amountMax = ''; hasQuote = ''; sortBy = '';
+    ['#pipeChan', '#pipeSearch', '#pipeStage', '#pipeFrom', '#pipeTo', '#pipeAmountMin', '#pipeAmountMax', '#pipeHasQuote', '#pipeSort']
       .forEach(id => { const el = $(id); if (el) el.value = ''; });
     load();
   }
@@ -323,6 +332,7 @@
     $('#pipeAmountMin').addEventListener('input', amt);
     $('#pipeAmountMax').addEventListener('input', amt);
     $('#pipeHasQuote').addEventListener('change', e => { hasQuote = e.target.value; load(); });
+    $('#pipeSort').addEventListener('change', e => { sortBy = e.target.value; render(); });
     $('#pipeClear').addEventListener('click', clearFilters);
     $('#quoteClose').addEventListener('click', closeQuote);
     $('#quoteModal').addEventListener('click', e => { if (e.target.id === 'quoteModal') closeQuote(); });
