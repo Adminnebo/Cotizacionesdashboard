@@ -35,6 +35,10 @@ function ensure() {
     // (completion). Los define el super_admin; n8n los consulta para calcular el coste.
     await q(`ALTER TABLE pct_models ADD COLUMN IF NOT EXISTS price_in NUMERIC NOT NULL DEFAULT 0`);
     await q(`ALTER TABLE pct_models ADD COLUMN IF NOT EXISTS price_out NUMERIC NOT NULL DEFAULT 0`);
+    // Horarios especiales (UTC): franjas con otro precio por 1M tokens (ej. Deepseek
+    // off-peak). Array de { start:"HH:MM", end:"HH:MM", priceIn, priceOut } en UTC.
+    // Fuera de las franjas aplica price_in/price_out (base).
+    await q(`ALTER TABLE pct_models ADD COLUMN IF NOT EXISTS price_windows JSONB NOT NULL DEFAULT '[]'::jsonb`);
   })().catch(e => { ready = null; throw e; });
   return ready;
 }
@@ -49,14 +53,59 @@ const err = (msg, status) => { const e = new Error(msg); e.status = status || 40
 const shapeModel = m => ({
   id: String(m.id), name: m.name, slug: m.slug,
   percent: Number(m.percent), coste: Number(m.coste),
-  priceIn: Number(m.price_in || 0), priceOut: Number(m.price_out || 0)   // USD por 1M tokens
+  priceIn: Number(m.price_in || 0), priceOut: Number(m.price_out || 0),   // USD por 1M tokens (base)
+  priceWindows: normWindows(m.price_windows) || []                        // franjas horarias UTC
 });
+
+// --- Horarios especiales (UTC) ---
+// hora "HH:MM" válida → normalizada; si no, null.
+function hhmm(v) {
+  const m = String(v == null ? '' : v).trim().match(/^(\d{1,2}):(\d{2})$/);
+  if (!m) return null;
+  const h = +m[1], mi = +m[2];
+  if (h > 23 || mi > 59) return null;
+  return String(h).padStart(2, '0') + ':' + String(mi).padStart(2, '0');
+}
+// Valida/normaliza el array de franjas. Acepta array (o su JSON en texto). Lanza
+// si algo es inválido. Devuelve [] para vacío.
+function normWindows(v) {
+  if (v == null) return [];
+  let arr = v;
+  if (typeof arr === 'string') { try { arr = JSON.parse(arr); } catch (_) { throw err('Horarios inválidos'); } }
+  if (!Array.isArray(arr)) throw err('Horarios inválidos');
+  const out = [];
+  for (const w of arr) {
+    if (!w) continue;
+    const start = hhmm(w.start), end = hhmm(w.end);
+    if (start == null || end == null) throw err('Hora inválida en un horario (usa HH:MM en UTC)');
+    const pin = Number(w.priceIn), pout = Number(w.priceOut);
+    if (!Number.isFinite(pin) || pin < 0 || !Number.isFinite(pout) || pout < 0) throw err('Precio inválido en un horario');
+    out.push({ start, end, priceIn: Math.round(pin * 1e6) / 1e6, priceOut: Math.round(pout * 1e6) / 1e6 });
+  }
+  return out;
+}
+const minOf = hm => { const [h, m] = hm.split(':').map(Number); return h * 60 + m; };
+const inWindow = (mins, w) => {
+  const s = minOf(w.start), e = minOf(w.end);
+  if (s === e) return false;
+  return s < e ? (mins >= s && mins < e) : (mins >= s || mins < e);   // cruza medianoche
+};
+// Precio efectivo de un modelo en una fecha (UTC): la primera franja que aplique,
+// o el precio base. Devuelve { priceIn, priceOut, peak:bool, window }.
+function effectivePrice(model, date) {
+  const d = date instanceof Date ? date : new Date(date || Date.now());
+  const mins = d.getUTCHours() * 60 + d.getUTCMinutes();
+  for (const w of (model.priceWindows || [])) {
+    if (inWindow(mins, w)) return { priceIn: w.priceIn, priceOut: w.priceOut, peak: false, window: w };
+  }
+  return { priceIn: model.priceIn, priceOut: model.priceOut, peak: true, window: null };
+}
 
 // Todos los agentes con sus modelos anidados.
 async function listAll() {
   await ensure();
   const a = await q(`SELECT id, name, slug FROM pct_agents ORDER BY name ASC`);
-  const m = await q(`SELECT id, agent_id, name, slug, percent, coste, price_in, price_out FROM pct_models ORDER BY name ASC`);
+  const m = await q(`SELECT id, agent_id, name, slug, percent, coste, price_in, price_out, price_windows FROM pct_models ORDER BY name ASC`);
   const porAgente = new Map();
   m.rows.forEach(r => { const k = String(r.agent_id); if (!porAgente.has(k)) porAgente.set(k, []); porAgente.get(k).push(shapeModel(r)); });
   return a.rows.map(ag => ({ id: String(ag.id), name: ag.name, slug: ag.slug, models: porAgente.get(String(ag.id)) || [] }));
@@ -70,7 +119,7 @@ async function getAgent(name) {
   const a = await q(`SELECT id, name, slug FROM pct_agents WHERE slug=$1`, [s]);
   if (!a.rows[0]) return null;
   const ag = a.rows[0];
-  const m = await q(`SELECT id, name, slug, percent, coste, price_in, price_out FROM pct_models WHERE agent_id=$1 ORDER BY name ASC`, [ag.id]);
+  const m = await q(`SELECT id, name, slug, percent, coste, price_in, price_out, price_windows FROM pct_models WHERE agent_id=$1 ORDER BY name ASC`, [ag.id]);
   return { id: String(ag.id), name: ag.name, slug: ag.slug, models: m.rows.map(shapeModel) };
 }
 
@@ -80,7 +129,7 @@ async function getModel(agentName, modelName) {
   const as = slugify(agentName), ms = slugify(modelName);
   if (!as || !ms) return null;
   const r = await q(
-    `SELECT m.id, m.name, m.slug, m.percent, m.coste, m.price_in, m.price_out, a.name AS agent, a.slug AS agent_slug
+    `SELECT m.id, m.name, m.slug, m.percent, m.coste, m.price_in, m.price_out, m.price_windows, a.name AS agent, a.slug AS agent_slug
      FROM pct_models m JOIN pct_agents a ON a.id = m.agent_id
      WHERE a.slug=$1 AND m.slug=$2`, [as, ms]);
   if (!r.rows[0]) return null;
@@ -88,7 +137,8 @@ async function getModel(agentName, modelName) {
   return {
     agent: x.agent, agentSlug: x.agent_slug, model: x.name, slug: x.slug,
     percent: Number(x.percent), coste: Number(x.coste),
-    priceIn: Number(x.price_in || 0), priceOut: Number(x.price_out || 0)   // USD por 1M tokens
+    priceIn: Number(x.price_in || 0), priceOut: Number(x.price_out || 0),   // USD por 1M tokens (base)
+    priceWindows: normWindows(x.price_windows) || []                        // franjas horarias UTC
   };
 }
 
@@ -99,7 +149,7 @@ async function modelMap() {
   const ags = await listAll();
   const byPair = {}, byModel = {};
   ags.forEach(a => a.models.forEach(m => {
-    const v = { percent: m.percent, coste: m.coste, priceIn: m.priceIn, priceOut: m.priceOut };
+    const v = { percent: m.percent, coste: m.coste, priceIn: m.priceIn, priceOut: m.priceOut, priceWindows: m.priceWindows };
     byPair[a.slug + '|' + m.slug] = v;
     byModel[m.slug] = v;
   }));
@@ -134,8 +184,8 @@ async function removeAgent(id) {
 // ---- Modelos (dentro de un agente) ----
 // coste / priceIn / priceOut son opcionales: si no vienen, se mantiene el valor
 // que tenga (update) o se usa el default de la columna (insert).
-const RET = 'id,name,slug,percent,coste,price_in,price_out';
-async function saveModel({ id, agentId, name, percent, coste, priceIn, priceOut }) {
+const RET = 'id,name,slug,percent,coste,price_in,price_out,price_windows';
+async function saveModel({ id, agentId, name, percent, coste, priceIn, priceOut, priceWindows }) {
   await ensure();
   const nombre = String(name || '').trim();
   if (!nombre || slugify(nombre) === '') throw err('El nombre del modelo es obligatorio');
@@ -150,17 +200,19 @@ async function saveModel({ id, agentId, name, percent, coste, priceIn, priceOut 
     if (!Number.isFinite(x) || x < 0) throw err(label + ' inválido');
     return Math.round(x * 1e6) / 1e6;
   };
+  // Columnas opcionales: [columna, valor, castJsonb?]. null = no tocar.
   const extras = [
-    ['coste', num(coste, 'Coste')],
-    ['price_in', num(priceIn, 'Precio de entrada')],
-    ['price_out', num(priceOut, 'Precio de salida')]
+    ['coste', num(coste, 'Coste'), false],
+    ['price_in', num(priceIn, 'Precio de entrada'), false],
+    ['price_out', num(priceOut, 'Precio de salida'), false],
+    ['price_windows', priceWindows == null ? null : JSON.stringify(normWindows(priceWindows)), true]
   ].filter(([, v]) => v != null);
 
   try {
     if (id) {
       const sets = ['name=$2', 'slug=$3', 'percent=$4', 'updated_at=now()'];
       const params = [id, nombre, slug, valor];
-      for (const [c, v] of extras) { params.push(v); sets.push(`${c}=$${params.length}`); }
+      for (const [c, v, json] of extras) { params.push(v); sets.push(`${c}=$${params.length}${json ? '::jsonb' : ''}`); }
       const r = await q(`UPDATE pct_models SET ${sets.join(', ')} WHERE id=$1 RETURNING ${RET}`, params);
       if (!r.rows[0]) throw err('No existe ese modelo', 404);
       return shapeModel(r.rows[0]);
@@ -170,7 +222,7 @@ async function saveModel({ id, agentId, name, percent, coste, priceIn, priceOut 
     const cols = ['agent_id', 'name', 'slug', 'percent'];
     const params = [agentId, nombre, slug, valor];
     for (const [c, v] of extras) { cols.push(c); params.push(v); }
-    const ph = params.map((_, i) => '$' + (i + 1)).join(',');
+    const ph = cols.map((c, i) => '$' + (i + 1) + (c === 'price_windows' ? '::jsonb' : '')).join(',');
     const upd = ['name=EXCLUDED.name', 'percent=EXCLUDED.percent', 'updated_at=now()']
       .concat(extras.map(([c]) => `${c}=EXCLUDED.${c}`)).join(', ');
     const r = await q(
@@ -190,4 +242,4 @@ async function removeModel(id) {
   return !!r.rows[0];
 }
 
-module.exports = { listAll, getAgent, getModel, modelMap, saveAgent, removeAgent, saveModel, removeModel, slugify };
+module.exports = { listAll, getAgent, getModel, modelMap, saveAgent, removeAgent, saveModel, removeModel, slugify, effectivePrice };

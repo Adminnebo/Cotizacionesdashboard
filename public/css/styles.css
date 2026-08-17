@@ -480,3 +480,16 @@ table.msgs { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 .md-item { flex-wrap: wrap; }
 .md-field .pct__input, .md-coste, .md-new-coste { width: 80px; }
 .md-unit { font-size: 11px; font-weight: 600; margin-left: 1px; white-space: nowrap; }
+
+/* ── Precios por horario (UTC) de un modelo ──────────────────────────────── */
+.md-tog-win { font-size: 12.5px; font-weight: 600; padding: 6px 10px; border: 1px solid var(--border); border-radius: 8px; background: transparent; color: var(--text-secondary); cursor: pointer; white-space: nowrap; }
+.md-tog-win:hover, .md-tog-win--on { border-color: var(--received); color: var(--received); }
+.md-windows { flex-basis: 100%; width: 100%; margin-top: 8px; padding: 11px; border: 1px dashed var(--border); border-radius: 9px; background: var(--surface-0); }
+.mw-head { font-size: 12px; color: var(--text-muted); margin-bottom: 9px; line-height: 1.5; }
+.mw-list { display: flex; flex-direction: column; gap: 8px; }
+.mw-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.mw-row input[type="time"] { padding: 7px 8px; font-size: 14px; font-variant-numeric: tabular-nums; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-1); color: var(--text-primary); }
+.mw-sep { color: var(--text-muted); font-weight: 700; }
+.mw-utc { font-size: 11px; font-weight: 700; color: var(--text-muted); margin-right: 4px; }
+.md-win-add { margin-top: 10px; }
+.mw-note { display: inline-block; margin-left: 10px; font-size: 11px; color: var(--text-muted); }

@@ -107,6 +107,22 @@
   const esSuper = () => window.NEBO_ROLE === 'super_admin';
   let agentes = [];                 // [{ id, name, slug, models:[{id,name,slug,percent}] }]
   const abiertos = new Set();       // ids de agentes desplegados (persiste entre renders)
+  const winAbiertos = new Set();    // ids de modelos con el panel de horarios abierto
+
+  // Una fila de horario especial (franja UTC con su precio por 1M tokens).
+  const winRowHtml = w => {
+    w = w || {};
+    const v = x => x == null ? '' : esc(x);
+    return `<div class="mw-row">
+      <input type="time" class="mw-start" value="${v(w.start)}" title="Inicio (UTC)" />
+      <span class="mw-sep">–</span>
+      <input type="time" class="mw-end" value="${v(w.end)}" title="Fin (UTC)" />
+      <span class="mw-utc">UTC</span>
+      <span class="md-field" title="Precio 1M tokens de entrada en esta franja (USD)"><span class="md-cur">$</span><input type="number" class="pct__input mw-pin" step="0.01" min="0" value="${v(w.priceIn)}" /><span class="pct__sign md-unit">/1M in</span></span>
+      <span class="md-field" title="Precio 1M tokens de salida en esta franja (USD)"><span class="md-cur">$</span><input type="number" class="pct__input mw-pout" step="0.01" min="0" value="${v(w.priceOut)}" /><span class="pct__sign md-unit">/1M out</span></span>
+      <button class="pct__item-del" data-act="windel" title="Quitar horario">✕</button>
+    </div>`;
+  };
 
   async function loadPercent() {
     const card = $('#pctCard');
@@ -127,16 +143,26 @@
     if (!agentes.length) { box.innerHTML = '<p class="muted small">Aún no hay agentes. Crea el primero abajo.</p>'; return; }
     box.innerHTML = agentes.map(a => {
       const open = abiertos.has(a.id);
-      const modelos = a.models.map(m => `
+      const modelos = a.models.map(m => {
+        const winOpen = winAbiertos.has(m.id), wins = m.priceWindows || [];
+        return `
         <div class="md-item" data-model="${esc(m.id)}">
           <span class="md-name" title="GET /api/porcentaje?agent=${esc(a.slug)}&model=${esc(m.slug)}">${esc(m.name)}</span>
           <span class="md-field" title="Margen: cobrado = coste × (1 + %/100)"><input type="number" class="pct__input md-val" step="0.01" min="0" value="${esc(m.percent)}" /><span class="pct__sign">%</span></span>
           <span class="md-field" title="Coste de cobro por mensaje (USD)"><span class="md-cur">$</span><input type="number" class="pct__input md-coste" step="0.000001" min="0" value="${esc(m.coste)}" /><span class="pct__sign md-unit">/msg</span></span>
           <span class="md-field" title="Precio por 1.000.000 de tokens de ENTRADA (USD)"><span class="md-cur">$</span><input type="number" class="pct__input md-pin" step="0.01" min="0" value="${esc(m.priceIn)}" /><span class="pct__sign md-unit">/1M in</span></span>
           <span class="md-field" title="Precio por 1.000.000 de tokens de SALIDA (USD)"><span class="md-cur">$</span><input type="number" class="pct__input md-pout" step="0.01" min="0" value="${esc(m.priceOut)}" /><span class="pct__sign md-unit">/1M out</span></span>
+          <button class="md-tog-win ${winOpen ? 'md-tog-win--on' : ''}" data-act="wintoggle" title="Precios por horario (UTC)">⏰ ${wins.length || ''}</button>
           <button class="q__btn md-save" data-act="mdsave">Guardar</button>
           <button class="pct__item-del" data-act="mddel" title="Eliminar modelo">✕</button>
-        </div>`).join('');
+          <div class="md-windows" ${winOpen ? '' : 'hidden'}>
+            <div class="mw-head">Precios por <b>horario en UTC</b> (fuera de estas franjas aplica el precio base de arriba). Ej. Deepseek off-peak <b>16:30–00:30 UTC</b>.</div>
+            <div class="mw-list">${wins.map(winRowHtml).join('')}</div>
+            <button class="q__btn md-win-add" data-act="winadd">+ Añadir horario</button>
+            <span class="mw-note">Pulsa <b>Guardar</b> en el modelo para aplicar los horarios.</span>
+          </div>
+        </div>`;
+      }).join('');
       return `
       <div class="ag-item ${open ? 'ag-item--open' : ''}" data-agent="${esc(a.id)}">
         <div class="ag-head" data-act="toggle">
@@ -231,8 +257,19 @@
     if (!Number.isFinite(coste) || coste < 0) { pctMsg('Coste inválido', 'err'); return; }
     if (!Number.isFinite(priceIn) || priceIn < 0) { pctMsg('Precio de entrada inválido', 'err'); return; }
     if (!Number.isFinite(priceOut) || priceOut < 0) { pctMsg('Precio de salida inválido', 'err'); return; }
+    // Horarios especiales (franjas UTC): se recogen del DOM.
+    const windows = [...mdItem.querySelectorAll('.mw-row')].map(r => ({
+      start: r.querySelector('.mw-start').value,
+      end: r.querySelector('.mw-end').value,
+      priceIn: r.querySelector('.mw-pin').value,
+      priceOut: r.querySelector('.mw-pout').value
+    })).filter(w => w.start || w.end || w.priceIn !== '' || w.priceOut !== '');
+    for (const w of windows) {
+      if (!w.start || !w.end) { pctMsg('Completa inicio y fin (UTC) de cada horario', 'err'); return; }
+      if (w.priceIn === '' || w.priceOut === '' || Number(w.priceIn) < 0 || Number(w.priceOut) < 0) { pctMsg('Completa los precios de cada horario', 'err'); return; }
+    }
     pctMsg('Guardando…');
-    try { abiertos.add(agentId); await api('/api/porcentaje/modelo', 'POST', { id, name, percent: val, coste, priceIn, priceOut }); pctMsg('Guardado ✓', 'ok'); await loadPercent(); }
+    try { abiertos.add(agentId); await api('/api/porcentaje/modelo', 'POST', { id, name, percent: val, coste, priceIn, priceOut, priceWindows: windows }); pctMsg('Guardado ✓', 'ok'); await loadPercent(); }
     catch (e) { pctMsg(e.message, 'err'); }
   }
   async function borrarModelo(mdItem, agentId) {
@@ -303,6 +340,13 @@
         else if (act === 'mdadd') añadirModelo(agItem);
         else if (act === 'mdsave') guardarModelo(b.closest('.md-item'), agentId);
         else if (act === 'mddel') borrarModelo(b.closest('.md-item'), agentId);
+        else if (act === 'wintoggle') {
+          const md = b.closest('.md-item'), panel = md.querySelector('.md-windows'), open = panel.hidden;
+          panel.hidden = !open; b.classList.toggle('md-tog-win--on', open);
+          if (open) winAbiertos.add(md.dataset.model); else winAbiertos.delete(md.dataset.model);
+        }
+        else if (act === 'winadd') b.closest('.md-windows').querySelector('.mw-list').insertAdjacentHTML('beforeend', winRowHtml({}));
+        else if (act === 'windel') { const row = b.closest('.mw-row'); if (row) row.remove(); }
       });
       list.addEventListener('keydown', e => {
         if (e.key !== 'Enter') return;

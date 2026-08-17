@@ -99,7 +99,11 @@ app.get('/api/porcentaje', wrap(async (req, res) => {
   if (agent && model) {                         // ?agent=..&model=.. → un modelo concreto
     const m = await settingsStore.getModel(agent, model);
     if (!m) return res.status(404).json({ error: 'No existe ese modelo', agent, model });
-    return res.json(m);                         // { agent, agentSlug, model, slug, percent }
+    // Precio efectivo según la hora UTC (?at=ISO, o ahora). Útil para que n8n
+    // consulte el precio vigente sin recalcular las franjas. peak=fuera de franja.
+    const at = req.query.at ? new Date(req.query.at) : new Date();
+    const eff = isNaN(at.getTime()) ? settingsStore.effectivePrice(m, new Date()) : settingsStore.effectivePrice(m, at);
+    return res.json({ ...m, effective: { at: (isNaN(at.getTime()) ? new Date() : at).toISOString(), priceIn: eff.priceIn, priceOut: eff.priceOut, peak: eff.peak } });
   }
   if (agent) {                                  // ?agent=.. → un agente con sus modelos
     const a = await settingsStore.getAgent(agent);
@@ -175,7 +179,8 @@ app.post('/api/porcentaje/modelo', wrap(async (req, res) => {
       percent: b.percent != null ? b.percent : b.porcentaje,
       coste: b.coste != null ? b.coste : b.cost,
       priceIn: b.priceIn != null ? b.priceIn : b.price_in,
-      priceOut: b.priceOut != null ? b.priceOut : b.price_out
+      priceOut: b.priceOut != null ? b.priceOut : b.price_out,
+      priceWindows: b.priceWindows != null ? b.priceWindows : b.price_windows
     });
     res.json({ ok: true, model: m });
   } catch (e) { res.status(e.status || 500).json({ error: e.message }); }
