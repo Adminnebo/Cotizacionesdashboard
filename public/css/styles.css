@@ -448,3 +448,9 @@ table.msgs { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 .camila__headright { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; justify-content: flex-end; }
 .camila__viewseg .seg { font-size: 12.5px; }
 .camila__botchip { font-size: 13px; padding: 5px 13px; }
+
+/* Controles del detallado (super admin): filtro por agente + excluir test */
+.camila__dctrls { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; margin: 2px 0 14px; padding-top: 12px; border-top: 1px solid var(--border-soft); }
+.camila__agentseg .seg { font-size: 12.5px; }
+.camila__check { display: inline-flex; align-items: center; gap: 7px; font-size: 13px; color: var(--text-secondary); cursor: pointer; user-select: none; }
+.camila__check input { width: 15px; height: 15px; accent-color: var(--received); cursor: pointer; margin: 0; }

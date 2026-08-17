@@ -347,7 +347,22 @@
   // global de arriba: cambiarla NO afecta al resto de métricas ni al revés.
   const CAM_DAY = 86400000;
   let camInited = false, camDrag = null, camDetail = false;   // camDetail: vista detallada (solo super admin)
+  let camAgentFilter = 'all', camExcludeTest = true;          // filtros del detallado
   let camDomA = 0, camDomB = 0, camFrom = 0, camTo = 0;   // dominio y selección (ms)
+
+  // Bucket activo según "excluir test": solo prod, o prod+test combinados.
+  function camBucket(pack, excludeTest) {
+    const p = pack.prod || { total: 0, ok: 0, failed: 0 };
+    if (excludeTest) return { total: p.total, ok: p.ok, failed: p.failed, eff: p.total ? p.ok / p.total : null };
+    const t = pack.test || { total: 0, ok: 0, failed: 0 };
+    const total = p.total + t.total, ok = p.ok + t.ok, failed = p.failed + t.failed;
+    return { total, ok, failed, eff: total ? ok / total : null };
+  }
+  function camSum(list, pick) {   // suma buckets ya elegidos (pick(x) -> {total,ok,failed})
+    const a = { total: 0, ok: 0, failed: 0 };
+    for (const x of list) { const b = pick(x); a.total += b.total; a.ok += b.ok; a.failed += b.failed; }
+    return { total: a.total, ok: a.ok, failed: a.failed, eff: a.total ? a.ok / a.total : null };
+  }
   const camFmtDay = ms => new Date(ms).toLocaleDateString('es-MX', { day: '2-digit', month: 'short' });
   const camDaysBetween = (a, b) => Math.max(1, Math.round((b - a) / CAM_DAY));
   const camSnap = ms => Math.round(ms / CAM_DAY) * CAM_DAY;   // ajusta a día
@@ -432,39 +447,49 @@
 
   function renderCamila() {
     const d = camilaData, body = $('#camilaBody'); if (!body || !d) return;
-    const upd = $('#camilaUpdated'), note = $('#camilaNote'), seg = $('#camilaViewSeg');
+    const upd = $('#camilaUpdated'), note = $('#camilaNote'), seg = $('#camilaViewSeg'), dctrls = $('#camilaDetailCtrls');
     if (d.available === false) {
       body.innerHTML = `<p class="card__note">Métrica no disponible: ${escapeHtml(d.error || 'n8n no configurado')}.</p>`;
-      if (upd) upd.textContent = ''; if (note) note.textContent = ''; if (seg) seg.hidden = true; return;
+      if (upd) upd.textContent = ''; if (note) note.textContent = '';
+      if (seg) seg.hidden = true; if (dctrls) dctrls.hidden = true; return;
     }
     // El toggle detallado es SOLO para super_admin; el cliente ve siempre lo agrupado.
     if (seg) seg.hidden = !d.canDetail;
     if (!d.canDetail) camDetail = false;
     const detailed = camDetail && d.canDetail && Array.isArray(d.byWorkflow);
+    if (dctrls) dctrls.hidden = !detailed;             // filtros (agente + excluir test) solo en detallado
 
-    const p = d.overall.prod, test = d.overall.test;
-    const cls = effClass(p.eff);
+    let heroB, testB, rows;
+    if (detailed) {
+      // Filtro por tipo de agente (carpeta) + excluir/incluir test.
+      const list = d.byWorkflow.filter(w => camAgentFilter === 'all' || w.folder === camAgentFilter);
+      heroB = camSum(list, w => camBucket(w, camExcludeTest));
+      testB = camSum(list, w => (w.test || { total: 0, ok: 0, failed: 0 }));
+      rows = list.length
+        ? list.map(w => camRow(`<span class="chip ${folderChip(w.folder)}">${escapeHtml(w.folder)}</span><span class="camila__wfname">${escapeHtml(w.name)}</span>`, camBucket(w, camExcludeTest))).join('')
+        : '<p class="card__note">Sin flujos para ese agente.</p>';
+    } else {
+      heroB = d.overall.prod;                           // general (cliente): siempre producción
+      testB = d.overall.test;
+      rows = (d.byFolder || []).map(f => camRow(`<span class="chip ${folderChip(f.folder)} camila__botchip">${escapeHtml(f.folder)}</span>`, f.prod)).join('');
+    }
+
+    const cls = effClass(heroB.eff);
+    const heroLbl = (detailed && !camExcludeTest) ? 'eficiencia · prod + test' : 'eficiencia · producción';
+    const showTest = testB && testB.total > 0 && (camExcludeTest || !detailed);
     const hero = `<div class="camila__hero">
-        <div class="camila__big camila__big--${cls}">${pctTxt(p.eff)}<span class="camila__biglbl">eficiencia · producción</span></div>
+        <div class="camila__big camila__big--${cls}">${pctTxt(heroB.eff)}<span class="camila__biglbl">${heroLbl}</span></div>
         <div class="camila__tiles">
-          <div class="camila__tile"><span class="camila__tnum">${fmtNum(p.total)}</span><span class="camila__tlbl">ejecuciones</span></div>
-          <div class="camila__tile"><span class="camila__tnum camila__tnum--fail">${fmtNum(p.failed)}</span><span class="camila__tlbl">fallidas</span></div>
-          ${test.total ? `<div class="camila__tile"><span class="camila__tnum">${pctTxt(test.eff)}</span><span class="camila__tlbl">test · ${fmtNum(test.total)} ejec</span></div>` : ''}
+          <div class="camila__tile"><span class="camila__tnum">${fmtNum(heroB.total)}</span><span class="camila__tlbl">ejecuciones</span></div>
+          <div class="camila__tile"><span class="camila__tnum camila__tnum--fail">${fmtNum(heroB.failed)}</span><span class="camila__tlbl">fallidas</span></div>
+          ${showTest ? `<div class="camila__tile"><span class="camila__tnum">${pctTxt(testB.eff)}</span><span class="camila__tlbl">test · ${fmtNum(testB.total)} ejec</span></div>` : ''}
         </div>
       </div>`;
-    let rows;
-    if (detailed) {
-      rows = d.byWorkflow.map(w => camRow(
-        `<span class="chip ${folderChip(w.folder)}">${escapeHtml(w.folder)}</span><span class="camila__wfname">${escapeHtml(w.name)}</span>`, w.prod)).join('');
-    } else {
-      rows = (d.byFolder || []).map(f => camRow(
-        `<span class="chip ${folderChip(f.folder)} camila__botchip">${escapeHtml(f.folder)}</span>`, f.prod)).join('');
-    }
     body.innerHTML = hero + `<div class="camila__list">${rows}</div>`;
     if (upd) upd.textContent = d.updatedAt ? ('actualizado ' + relTime(d.updatedAt)) : (d.syncing ? 'sincronizando…' : '');
     if (note) note.textContent = (d.warning ? '⚠️ ' + d.warning + '. ' : '') +
-      'Eficiencia = ejecuciones exitosas ÷ terminadas (en n8n), sobre los flujos de procesamiento de Camila (WhatsApp bot + IG/FB/WEB). No incluye el trigger de WhatsApp (eventos de Meta) ni ejecuciones en curso.' +
-      (detailed ? '' : ' Vista general por bot.');
+      'Eficiencia = ejecuciones exitosas ÷ terminadas (en n8n), sobre los flujos de procesamiento de Camila (WhatsApp + IG/FB/WEB). No incluye el trigger de WhatsApp (eventos de Meta) ni ejecuciones en curso.' +
+      (detailed ? (camExcludeTest ? ' Excluyendo ejecuciones de test.' : ' Incluyendo test en el total.') : ' Vista general por bot.');
   }
 
   async function loadCamila() {
@@ -597,6 +622,16 @@
       camDetail = b.dataset.view === 'detail';
       renderCamila();
     });
+    // Filtros del detallado: tipo de agente (carpeta) + excluir test. Puro cliente,
+    // no recargan la API (los datos por workflow ya vienen para el super admin).
+    $('#camilaAgentSeg').addEventListener('click', e => {
+      const b = e.target.closest('.seg'); if (!b) return;
+      $('#camilaAgentSeg').querySelectorAll('.seg').forEach(x => x.classList.remove('seg--active'));
+      b.classList.add('seg--active');
+      camAgentFilter = b.dataset.agent;
+      renderCamila();
+    });
+    $('#camilaExclTest').addEventListener('change', e => { camExcludeTest = e.target.checked; renderCamila(); });
     $('#btnTheme').addEventListener('click', () => {
       applyTheme(document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
       render(); // re-pinta con los colores del tema

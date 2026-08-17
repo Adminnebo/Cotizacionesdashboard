@@ -34,10 +34,13 @@ const API_URL = String(process.env.N8N_API_URL || '').replace(/\/+$/, '');
 const API_TOKEN = process.env.N8N_API_TOKEN || '';
 const CONFIGURED = !!(API_URL && API_TOKEN);
 
-// Los 7 flujos de procesamiento (el WhatsApp trigger queda FUERA a propósito).
+// Los flujos de procesamiento (el WhatsApp trigger queda FUERA a propósito).
 const WORKFLOWS = [
   { id: 'l5VYme9yNIWnkni4', name: '2 - WhatsApp bot',                         folder: 'WhatsApp'  },
   { id: 'DfETlpQTmwhQmcLi', name: '2.1 - Procesar Input Camila',              folder: 'WhatsApp'  },
+  { id: 'KGu9mfNmqoS3Ikpb', name: '2.2 generar_cotizacion',                  folder: 'WhatsApp'  },
+  { id: 'CRcIpxhyrA4LnK1r', name: '2.3 enviar_imagen',                       folder: 'WhatsApp'  },
+  { id: '16sQiVoosJMpZy7q', name: 'enviar_fichatec wa',                      folder: 'WhatsApp'  },
   { id: 'WsHNndYM26fU85Ds', name: 'IG/FB/WEB Bot',                            folder: 'IG/FB/WEB' },
   { id: 'sdk9rxwAyILKJI4R', name: 'Procesar Input (Unificado Web + FB + IG)', folder: 'IG/FB/WEB' },
   { id: 'qnsSUSkJsoJHWANC', name: 'enviar fichatec IG/FB/WEB',                folder: 'IG/FB/WEB' },

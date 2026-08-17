@@ -83,6 +83,14 @@
           </div>
           <div class="camila__ticks" id="camilaTicks"></div>
         </div>
+        <div class="camila__dctrls" id="camilaDetailCtrls" hidden>
+          <div class="segmented camila__agentseg" id="camilaAgentSeg" role="tablist" aria-label="Tipo de agente">
+            <button class="seg seg--active" data-agent="all">Todos los agentes</button>
+            <button class="seg" data-agent="WhatsApp">WhatsApp</button>
+            <button class="seg" data-agent="IG/FB/WEB">IG / FB / Web</button>
+          </div>
+          <label class="camila__check"><input type="checkbox" id="camilaExclTest" checked /> Excluir ejecuciones de test</label>
+        </div>
         <div id="camilaBody"><p class="card__note">Cargando…</p></div>
         <p class="card__note" id="camilaNote"></p>
       </section>
