@@ -456,3 +456,22 @@ table.msgs { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 .camila__check input { width: 15px; height: 15px; accent-color: var(--received); cursor: pointer; margin: 0; }
 
 .camila__tnum--ext { color: var(--text-muted); }
+
+/* ── Calendario de semanas completas ─────────────────────────────────────── */
+.camila__range { position: relative; }
+.cam-cal-btn { font-size: 12px; font-weight: 600; padding: 4px 11px; border: 1px solid var(--border); border-radius: 999px; background: transparent; color: var(--text-secondary); cursor: pointer; }
+.cam-cal-btn:hover { border-color: var(--received); color: var(--received); }
+.camila__cal { position: absolute; right: 0; top: 34px; z-index: 30; width: 264px; background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,.18); padding: 12px; }
+.camcal__head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.camcal__title { font-size: 13.5px; font-weight: 700; text-transform: capitalize; }
+.camcal__nav { width: 26px; height: 26px; border: 1px solid var(--border); border-radius: 8px; background: transparent; cursor: pointer; font-size: 15px; line-height: 1; color: var(--text-secondary); }
+.camcal__nav:hover { border-color: var(--received); color: var(--received); }
+.camcal__dow { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; margin-bottom: 4px; }
+.camcal__dow span { text-align: center; font-size: 11px; color: var(--text-muted); font-weight: 700; }
+.camcal__week { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; border-radius: 8px; cursor: pointer; padding: 2px; border: 1px solid transparent; }
+.camcal__week:hover { background: var(--surface-0); border-color: var(--border); }
+.camcal__week--sel { background: color-mix(in srgb, var(--received) 20%, transparent); border-color: color-mix(in srgb, var(--received) 45%, transparent); }
+.camcal__week--anchor { border-color: var(--received); }
+.camcal__day { text-align: center; font-size: 12.5px; padding: 5px 0; color: var(--text-primary); font-variant-numeric: tabular-nums; }
+.camcal__day--other { color: var(--text-muted); opacity: .55; }
+.camcal__hint { margin-top: 9px; font-size: 11px; color: var(--text-muted); text-align: center; }

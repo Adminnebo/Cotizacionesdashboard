@@ -348,6 +348,7 @@
   const CAM_DAY = 86400000;
   let camInited = false, camDrag = null, camDetail = false;   // camDetail: vista detallada (solo super admin)
   let camAgentFilter = 'all', camExcludeTest = true;          // filtros del detallado
+  let camCalMonth = 0, camWeekAnchor = null;                  // calendario de semanas
   let camDomA = 0, camDomB = 0, camFrom = 0, camTo = 0;   // dominio y selección (ms)
 
   // Bucket activo según "excluir test": solo prod, o prod+test combinados.
@@ -436,6 +437,61 @@
     camDrag = { mode, grab: camPosToMs(ev.clientX), from0: camFrom, to0: camTo };
     document.addEventListener('pointermove', camOnMove);
     document.addEventListener('pointerup', camOnUp);
+  }
+
+  // ── Calendario para elegir SEMANAS completas (lunes → domingo) ─────────────
+  const camWeekStart = ms => { const d = new Date(ms); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); return d.getTime(); };
+  function camMonthGrid(monthMs) {
+    const f = new Date(monthMs); f.setDate(1); f.setHours(0, 0, 0, 0);
+    const weeks = [], d = new Date(camWeekStart(f.getTime()));
+    for (let wk = 0; wk < 6; wk++) {
+      const days = [];
+      for (let i = 0; i < 7; i++) { days.push(d.getTime()); d.setDate(d.getDate() + 1); }
+      weeks.push({ start: days[0], days });
+    }
+    return { weeks, month: f.getMonth() };
+  }
+  function camRenderCal() {
+    const cal = $('#camilaCal'); if (!cal || cal.hidden) return;
+    const g = camMonthGrid(camCalMonth);
+    const title = new Date(camCalMonth).toLocaleDateString('es-MX', { month: 'long', year: 'numeric' });
+    const selA = camWeekStart(camFrom), selB = camTo;   // rango [selA, selB)
+    let html = `<div class="camcal__head">
+        <button class="camcal__nav" data-nav="-1" type="button">‹</button>
+        <span class="camcal__title">${escapeHtml(title)}</span>
+        <button class="camcal__nav" data-nav="1" type="button">›</button>
+      </div>
+      <div class="camcal__dow">${['L', 'M', 'X', 'J', 'V', 'S', 'D'].map(x => `<span>${x}</span>`).join('')}</div>`;
+    html += g.weeks.map(w => {
+      const sel = w.start >= selA && w.start < selB;
+      const anchor = camWeekAnchor != null && w.start === camWeekStart(camWeekAnchor);
+      const cells = w.days.map(ms => {
+        const dt = new Date(ms), other = dt.getMonth() !== g.month;
+        return `<span class="camcal__day${other ? ' camcal__day--other' : ''}">${dt.getDate()}</span>`;
+      }).join('');
+      return `<div class="camcal__week${sel ? ' camcal__week--sel' : ''}${anchor ? ' camcal__week--anchor' : ''}" data-week="${w.start}">${cells}</div>`;
+    }).join('');
+    html += `<div class="camcal__hint">${camWeekAnchor != null ? 'Elige la semana final (o la misma para 1)' : 'Clic en una semana; clic en otra = rango'}</div>`;
+    cal.innerHTML = html;
+  }
+  function camWeekPick(ws) {
+    let a, b;
+    if (camWeekAnchor == null) { camWeekAnchor = ws; a = ws; b = ws; }
+    else { a = Math.min(camWeekAnchor, ws); b = Math.max(camWeekAnchor, ws); camWeekAnchor = null; }
+    const from = Math.max(camDomA, a), to = Math.min(camDomB, b + 7 * CAM_DAY);
+    if (to <= from) return;
+    camFrom = from; camTo = to;
+    $('#camilaPresets').querySelectorAll('.cam-preset').forEach(x => x.classList.remove('cam-preset--on'));
+    camRenderSlider(); camRenderCal(); loadCamila();
+  }
+  function camToggleCal(open) {
+    const cal = $('#camilaCal'); if (!cal || !camInited) return;
+    cal.hidden = open == null ? !cal.hidden : !open;
+    if (!cal.hidden) {
+      camWeekAnchor = null;
+      const d = new Date(camTo - CAM_DAY); d.setDate(1); d.setHours(0, 0, 0, 0); camCalMonth = d.getTime();
+      camRenderCal();
+    }
   }
 
   function camRow(nameHtml, e) {
@@ -636,6 +692,19 @@
       renderCamila();
     });
     $('#camilaExclTest').addEventListener('change', e => { camExcludeTest = e.target.checked; renderCamila(); });
+    // Calendario de semanas completas.
+    $('#camilaCalBtn').addEventListener('click', e => { e.stopPropagation(); camToggleCal(); });
+    $('#camilaCal').addEventListener('click', e => {
+      e.stopPropagation();
+      const nav = e.target.closest('.camcal__nav');
+      if (nav) { const d = new Date(camCalMonth); d.setDate(1); d.setMonth(d.getMonth() + Number(nav.dataset.nav)); camCalMonth = d.getTime(); camRenderCal(); return; }
+      const wk = e.target.closest('.camcal__week');
+      if (wk) camWeekPick(Number(wk.dataset.week));
+    });
+    document.addEventListener('click', e => {
+      const cal = $('#camilaCal');
+      if (cal && !cal.hidden && !cal.contains(e.target) && e.target.id !== 'camilaCalBtn') camToggleCal(false);
+    });
     $('#btnTheme').addEventListener('click', () => {
       applyTheme(document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
       render(); // re-pinta con los colores del tema
