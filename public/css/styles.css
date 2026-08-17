@@ -425,3 +425,26 @@ table.msgs { width: 100%; border-collapse: collapse; font-size: 13.5px; }
   .camila__nums { text-align: left; }
   .camila__big { font-size: 38px; }
 }
+
+/* ── Barra de fechas arrastrable de la tarjeta de Camila ─────────────────── */
+.camila__range { margin: 2px 0 16px; }
+.camila__rangehead { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 6px; }
+.camila__rangelbl { font-size: 13.5px; font-weight: 600; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.camila__presets { display: inline-flex; gap: 4px; }
+.cam-preset { font-size: 12px; font-weight: 600; padding: 4px 10px; border: 1px solid var(--border); border-radius: 999px; background: transparent; color: var(--text-secondary); cursor: pointer; }
+.cam-preset:hover { border-color: var(--received); }
+.cam-preset--on { background: var(--received); border-color: var(--received); color: #fff; }
+.camila__slider { position: relative; height: 30px; margin: 4px 0; touch-action: none; user-select: none; }
+.camila__strack { position: absolute; top: 50%; left: 0; right: 0; height: 8px; transform: translateY(-50%); background: var(--border-soft); border-radius: 999px; }
+.camila__ssel { position: absolute; top: 50%; height: 8px; transform: translateY(-50%); background: color-mix(in srgb, var(--received) 32%, transparent); border-radius: 999px; cursor: grab; }
+.camila__ssel:active { cursor: grabbing; }
+.camila__handle { position: absolute; top: 50%; width: 18px; height: 18px; margin-left: -9px; transform: translateY(-50%); padding: 0; border-radius: 50%; background: var(--surface-1); border: 3px solid var(--received); box-shadow: 0 1px 4px rgba(0,0,0,.22); cursor: ew-resize; z-index: 2; }
+.camila__handle:hover { background: var(--received); }
+.camila__handle:focus-visible { outline: 2px solid var(--received); outline-offset: 2px; }
+.camila__ticks { display: flex; justify-content: space-between; margin-top: 2px; }
+.camila__ticks span { font-size: 11px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+
+/* Cabecera de la tarjeta de Camila: toggle vista (super admin) + "actualizado" */
+.camila__headright { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; justify-content: flex-end; }
+.camila__viewseg .seg { font-size: 12.5px; }
+.camila__botchip { font-size: 13px; padding: 5px 13px; }

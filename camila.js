@@ -22,9 +22,13 @@ const express = require('express');
 const https = require('https');
 const http = require('http');
 const { URL } = require('url');
-const { optionalAuth } = require('./analyticsAuth');
+const { optionalAuth, configured: authCfg } = require('./analyticsAuth');
 const { rangeOf } = require('./range');
 const router = express.Router();
+
+// El DETALLE por workflow es solo para super_admin; el cliente ve siempre la
+// vista general (agrupada por bot). Sin auth (dev) se considera super.
+const esSuper = req => !authCfg || req.role === 'super_admin';
 
 const API_URL = String(process.env.N8N_API_URL || '').replace(/\/+$/, '');
 const API_TOKEN = process.env.N8N_API_TOKEN || '';
@@ -151,11 +155,13 @@ router.get('/camila-eficiencia', optionalAuth, wrap(async (req, res) => {
   const overall = { prod: blank(), test: blank() };
   const folders = new Map();
   const byWorkflow = [];
+  let oldest = 0;                                     // ejecución más antigua guardada (dominio de la barra)
 
   for (const w of WORKFLOWS) {
     const map = store.get(w.id) || new Map();
     const prod = blank(), test = blank();
     for (const v of map.values()) {
+      if (v.t && (oldest === 0 || v.t < oldest)) oldest = v.t;
       if (!v.t || v.t < f || v.t >= t) continue;
       if (v.ok === null) continue;                    // en curso/cancelada: no cuenta
       const b = v.prod ? prod : test;
@@ -169,17 +175,22 @@ router.get('/camila-eficiencia', optionalAuth, wrap(async (req, res) => {
 
   const eff = o => ({ total: o.total, ok: o.ok, failed: o.failed, eff: o.total ? o.ok / o.total : null });
   const pack = x => ({ prod: eff(x.prod), test: eff(x.test) });
+  const detalle = esSuper(req);                        // ¿puede ver el desglose por workflow?
 
   res.json({
     available: true,
     ready,
     syncing,
+    canDetail: detalle,
     updatedAt: lastSync ? new Date(lastSync).toISOString() : null,
     warning: lastError || null,
+    horizonDays: BACKFILL_DAYS,                        // ventana máxima que mantiene el espejo
+    oldestAt: oldest ? new Date(oldest).toISOString() : null,
     range: { from, to },
     overall: pack(overall),
     byFolder: [...folders.values()].map(x => ({ folder: x.folder, ...pack(x) })),
-    byWorkflow: byWorkflow.map(x => ({ id: x.id, name: x.name, folder: x.folder, ...pack(x) }))
+    // El detalle por workflow SOLO se envía al super_admin (no se filtra al cliente).
+    byWorkflow: detalle ? byWorkflow.map(x => ({ id: x.id, name: x.name, folder: x.folder, ...pack(x) })) : undefined
   });
 }));
 

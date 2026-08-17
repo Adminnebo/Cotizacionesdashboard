@@ -57,7 +57,31 @@
       <section class="card card--wide camila" id="camilaCard">
         <div class="card__head">
           <h2>Eficiencia de Camila</h2>
-          <span class="camila__updated" id="camilaUpdated"></span>
+          <div class="camila__headright">
+            <div class="segmented camila__viewseg" id="camilaViewSeg" role="tablist" aria-label="Vista" hidden>
+              <button class="seg seg--active" data-view="grouped">Por bot</button>
+              <button class="seg" data-view="detail">Detallado</button>
+            </div>
+            <span class="camila__updated" id="camilaUpdated"></span>
+          </div>
+        </div>
+        <div class="camila__range" id="camilaRange" hidden>
+          <div class="camila__rangehead">
+            <span class="camila__rangelbl" id="camilaRangeLbl">—</span>
+            <div class="camila__presets" id="camilaPresets">
+              <button class="cam-preset" data-d="7">7d</button>
+              <button class="cam-preset cam-preset--on" data-d="30">30d</button>
+              <button class="cam-preset" data-d="90">90d</button>
+              <button class="cam-preset" data-d="all">Todo</button>
+            </div>
+          </div>
+          <div class="camila__slider" id="camilaSlider">
+            <div class="camila__strack"></div>
+            <div class="camila__ssel" id="camilaSel" title="Arrastra para mover el rango"></div>
+            <button class="camila__handle" id="camilaH0" aria-label="Fecha inicio" title="Arrastra el inicio"></button>
+            <button class="camila__handle" id="camilaH1" aria-label="Fecha fin" title="Arrastra el fin"></button>
+          </div>
+          <div class="camila__ticks" id="camilaTicks"></div>
         </div>
         <div id="camilaBody"><p class="card__note">Cargando…</p></div>
         <p class="card__note" id="camilaNote"></p>

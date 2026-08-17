@@ -343,13 +343,105 @@
   const effClass = e => e == null ? 'na' : e >= 0.95 ? 'good' : e >= 0.85 ? 'warn' : 'bad';
   const folderChip = f => f === 'WhatsApp' ? 'chip--whatsapp' : 'chip--pagina_web';
 
+  // Rango PROPIO de la tarjeta (barra arrastrable), independiente del selector
+  // global de arriba: cambiarla NO afecta al resto de métricas ni al revés.
+  const CAM_DAY = 86400000;
+  let camInited = false, camDrag = null, camDetail = false;   // camDetail: vista detallada (solo super admin)
+  let camDomA = 0, camDomB = 0, camFrom = 0, camTo = 0;   // dominio y selección (ms)
+  const camFmtDay = ms => new Date(ms).toLocaleDateString('es-MX', { day: '2-digit', month: 'short' });
+  const camDaysBetween = (a, b) => Math.max(1, Math.round((b - a) / CAM_DAY));
+  const camSnap = ms => Math.round(ms / CAM_DAY) * CAM_DAY;   // ajusta a día
+
+  function camRangeParams() {
+    const p = new URLSearchParams();
+    if (camInited) { p.set('from', new Date(camFrom).toISOString()); p.set('to', new Date(camTo).toISOString()); }
+    else p.set('days', '30');
+    return p;
+  }
+
+  function camInitSlider(d) {
+    const horizon = (d.horizonDays || 120) * CAM_DAY, now = Date.now();
+    camDomA = camSnap(d.oldestAt ? Math.max(Date.parse(d.oldestAt), now - horizon) : now - horizon);
+    camDomB = camSnap(now) + CAM_DAY;                        // fin inclusivo (hasta hoy)
+    camTo = camDomB;
+    camFrom = Math.max(camDomA, camSnap(now - 30 * CAM_DAY)); // por defecto: últimos 30 días
+    camInited = true;
+    $('#camilaRange').hidden = false;
+    camRenderTicks(); camRenderSlider();
+  }
+
+  function camRenderTicks() {
+    const box = $('#camilaTicks'); if (!box) return;
+    const n = 4, out = [];
+    for (let i = 0; i <= n; i++) out.push(`<span>${camFmtDay(camDomA + (camDomB - camDomA) * i / n)}</span>`);
+    box.innerHTML = out.join('');
+  }
+  const camPct = ms => camDomB > camDomA ? ((ms - camDomA) / (camDomB - camDomA)) * 100 : 0;
+
+  function camRenderSlider() {
+    const h0 = $('#camilaH0'), h1 = $('#camilaH1'), sel = $('#camilaSel'), lbl = $('#camilaRangeLbl');
+    if (!h0) return;
+    const a = camPct(camFrom), b = camPct(camTo);
+    h0.style.left = a + '%'; h1.style.left = b + '%';
+    sel.style.left = a + '%'; sel.style.width = (b - a) + '%';
+    if (lbl) lbl.textContent = `${camFmtDay(camFrom)} → ${camFmtDay(camTo - CAM_DAY)} · ${camDaysBetween(camFrom, camTo)} días`;
+  }
+  function camPosToMs(clientX) {
+    const r = $('#camilaSlider').getBoundingClientRect();
+    const frac = Math.min(1, Math.max(0, (clientX - r.left) / r.width));
+    return camSnap(camDomA + frac * (camDomB - camDomA));
+  }
+  function camOnMove(ev) {
+    if (!camDrag) return;
+    const ms = camPosToMs(ev.clientX);
+    if (camDrag.mode === 'start') camFrom = Math.min(Math.max(camDomA, ms), camTo - CAM_DAY);
+    else if (camDrag.mode === 'end') camTo = Math.max(Math.min(camDomB, ms), camFrom + CAM_DAY);
+    else {                                                   // 'band': mueve todo el rango
+      const width = camDrag.to0 - camDrag.from0;
+      let nf = camDrag.from0 + (ms - camDrag.grab), nt = nf + width;
+      if (nf < camDomA) { nf = camDomA; nt = nf + width; }
+      if (nt > camDomB) { nt = camDomB; nf = nt - width; }
+      camFrom = nf; camTo = nt;
+    }
+    camRenderSlider();
+  }
+  function camOnUp() {
+    if (!camDrag) return;
+    camDrag = null;
+    document.removeEventListener('pointermove', camOnMove);
+    document.removeEventListener('pointerup', camOnUp);
+    loadCamila();                                            // recarga SOLO la tarjeta al soltar
+  }
+  function camStart(mode, ev) {
+    if (!camInited) return;
+    ev.preventDefault();
+    $('#camilaPresets').querySelectorAll('.cam-preset').forEach(x => x.classList.remove('cam-preset--on'));
+    camDrag = { mode, grab: camPosToMs(ev.clientX), from0: camFrom, to0: camTo };
+    document.addEventListener('pointermove', camOnMove);
+    document.addEventListener('pointerup', camOnUp);
+  }
+
+  function camRow(nameHtml, e) {
+    const c = effClass(e.eff), width = e.eff == null ? 0 : Math.round(e.eff * 100);
+    return `<div class="camila__row">
+      <div class="camila__wf">${nameHtml}</div>
+      <div class="camila__bar"><div class="camila__barfill camila__barfill--${c}" style="width:${width}%"></div></div>
+      <div class="camila__nums"><b class="camila__eff--${c}">${pctTxt(e.eff)}</b> <span class="dim">${fmtNum(e.total)} ejec · ${fmtNum(e.failed)} fall.</span></div>
+    </div>`;
+  }
+
   function renderCamila() {
     const d = camilaData, body = $('#camilaBody'); if (!body || !d) return;
-    const upd = $('#camilaUpdated'), note = $('#camilaNote');
+    const upd = $('#camilaUpdated'), note = $('#camilaNote'), seg = $('#camilaViewSeg');
     if (d.available === false) {
       body.innerHTML = `<p class="card__note">Métrica no disponible: ${escapeHtml(d.error || 'n8n no configurado')}.</p>`;
-      if (upd) upd.textContent = ''; if (note) note.textContent = ''; return;
+      if (upd) upd.textContent = ''; if (note) note.textContent = ''; if (seg) seg.hidden = true; return;
     }
+    // El toggle detallado es SOLO para super_admin; el cliente ve siempre lo agrupado.
+    if (seg) seg.hidden = !d.canDetail;
+    if (!d.canDetail) camDetail = false;
+    const detailed = camDetail && d.canDetail && Array.isArray(d.byWorkflow);
+
     const p = d.overall.prod, test = d.overall.test;
     const cls = effClass(p.eff);
     const hero = `<div class="camila__hero">
@@ -360,25 +452,27 @@
           ${test.total ? `<div class="camila__tile"><span class="camila__tnum">${pctTxt(test.eff)}</span><span class="camila__tlbl">test · ${fmtNum(test.total)} ejec</span></div>` : ''}
         </div>
       </div>`;
-    const rows = d.byWorkflow.map(w => {
-      const e = w.prod, c = effClass(e.eff), width = e.eff == null ? 0 : Math.round(e.eff * 100);
-      return `<div class="camila__row">
-        <div class="camila__wf"><span class="chip ${folderChip(w.folder)}">${w.folder}</span><span class="camila__wfname">${escapeHtml(w.name)}</span></div>
-        <div class="camila__bar"><div class="camila__barfill camila__barfill--${c}" style="width:${width}%"></div></div>
-        <div class="camila__nums"><b class="camila__eff--${c}">${pctTxt(e.eff)}</b> <span class="dim">${fmtNum(e.total)} ejec · ${fmtNum(e.failed)} fall.</span></div>
-      </div>`;
-    }).join('');
+    let rows;
+    if (detailed) {
+      rows = d.byWorkflow.map(w => camRow(
+        `<span class="chip ${folderChip(w.folder)}">${escapeHtml(w.folder)}</span><span class="camila__wfname">${escapeHtml(w.name)}</span>`, w.prod)).join('');
+    } else {
+      rows = (d.byFolder || []).map(f => camRow(
+        `<span class="chip ${folderChip(f.folder)} camila__botchip">${escapeHtml(f.folder)}</span>`, f.prod)).join('');
+    }
     body.innerHTML = hero + `<div class="camila__list">${rows}</div>`;
     if (upd) upd.textContent = d.updatedAt ? ('actualizado ' + relTime(d.updatedAt)) : (d.syncing ? 'sincronizando…' : '');
     if (note) note.textContent = (d.warning ? '⚠️ ' + d.warning + '. ' : '') +
-      'Eficiencia = ejecuciones exitosas ÷ terminadas (en n8n), sobre los flujos de procesamiento de Camila (WhatsApp bot + IG/FB/WEB). No incluye el trigger de WhatsApp (eventos de Meta) ni ejecuciones en curso.';
+      'Eficiencia = ejecuciones exitosas ÷ terminadas (en n8n), sobre los flujos de procesamiento de Camila (WhatsApp bot + IG/FB/WEB). No incluye el trigger de WhatsApp (eventos de Meta) ni ejecuciones en curso.' +
+      (detailed ? '' : ' Vista general por bot.');
   }
 
   async function loadCamila() {
     try {
-      const res = await fetch('/api/camila-eficiencia?' + rangeParams().toString(), { headers: authHeaders() });
+      const res = await fetch('/api/camila-eficiencia?' + camRangeParams().toString(), { headers: authHeaders() });
       camilaData = await res.json();
     } catch (e) { camilaData = { available: false, error: e.message }; }
+    if (!camInited && camilaData && camilaData.available !== false) camInitSlider(camilaData);
     renderCamila();
   }
 
@@ -483,6 +577,26 @@
       loadMessages();
     });
     $('#btnRefresh').addEventListener('click', () => { load(); loadMessages(); });
+    // Barra de fechas propia de la tarjeta de Camila (arrastre de extremos y del rango).
+    $('#camilaH0').addEventListener('pointerdown', e => camStart('start', e));
+    $('#camilaH1').addEventListener('pointerdown', e => camStart('end', e));
+    $('#camilaSel').addEventListener('pointerdown', e => camStart('band', e));
+    $('#camilaPresets').addEventListener('click', e => {
+      const b = e.target.closest('.cam-preset'); if (!b || !camInited) return;
+      $('#camilaPresets').querySelectorAll('.cam-preset').forEach(x => x.classList.remove('cam-preset--on'));
+      b.classList.add('cam-preset--on');
+      camTo = camDomB;
+      camFrom = b.dataset.d === 'all' ? camDomA : Math.max(camDomA, camSnap(Date.now() - Number(b.dataset.d) * CAM_DAY));
+      camRenderSlider(); loadCamila();
+    });
+    // Toggle "Por bot / Detallado" (solo se muestra al super admin).
+    $('#camilaViewSeg').addEventListener('click', e => {
+      const b = e.target.closest('.seg'); if (!b) return;
+      $('#camilaViewSeg').querySelectorAll('.seg').forEach(x => x.classList.remove('seg--active'));
+      b.classList.add('seg--active');
+      camDetail = b.dataset.view === 'detail';
+      renderCamila();
+    });
     $('#btnTheme').addEventListener('click', () => {
       applyTheme(document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
       render(); // re-pinta con los colores del tema
