@@ -351,17 +351,19 @@
   let camDomA = 0, camDomB = 0, camFrom = 0, camTo = 0;   // dominio y selección (ms)
 
   // Bucket activo según "excluir test": solo prod, o prod+test combinados.
+  // ext = fallos por servicio externo (no cuentan en total ni en eficiencia).
+  const zero = { total: 0, ok: 0, failed: 0, ext: 0 };
   function camBucket(pack, excludeTest) {
-    const p = pack.prod || { total: 0, ok: 0, failed: 0 };
-    if (excludeTest) return { total: p.total, ok: p.ok, failed: p.failed, eff: p.total ? p.ok / p.total : null };
-    const t = pack.test || { total: 0, ok: 0, failed: 0 };
-    const total = p.total + t.total, ok = p.ok + t.ok, failed = p.failed + t.failed;
-    return { total, ok, failed, eff: total ? ok / total : null };
+    const p = pack.prod || zero;
+    if (excludeTest) return { total: p.total, ok: p.ok, failed: p.failed, ext: p.ext || 0, eff: p.total ? p.ok / p.total : null };
+    const t = pack.test || zero;
+    const total = p.total + t.total, ok = p.ok + t.ok, failed = p.failed + t.failed, ext = (p.ext || 0) + (t.ext || 0);
+    return { total, ok, failed, ext, eff: total ? ok / total : null };
   }
-  function camSum(list, pick) {   // suma buckets ya elegidos (pick(x) -> {total,ok,failed})
-    const a = { total: 0, ok: 0, failed: 0 };
-    for (const x of list) { const b = pick(x); a.total += b.total; a.ok += b.ok; a.failed += b.failed; }
-    return { total: a.total, ok: a.ok, failed: a.failed, eff: a.total ? a.ok / a.total : null };
+  function camSum(list, pick) {   // suma buckets ya elegidos (pick(x) -> {total,ok,failed,ext})
+    const a = { total: 0, ok: 0, failed: 0, ext: 0 };
+    for (const x of list) { const b = pick(x); a.total += b.total; a.ok += b.ok; a.failed += b.failed; a.ext += (b.ext || 0); }
+    return { total: a.total, ok: a.ok, failed: a.failed, ext: a.ext, eff: a.total ? a.ok / a.total : null };
   }
   const camFmtDay = ms => new Date(ms).toLocaleDateString('es-MX', { day: '2-digit', month: 'short' });
   const camDaysBetween = (a, b) => Math.max(1, Math.round((b - a) / CAM_DAY));
@@ -482,13 +484,15 @@
         <div class="camila__tiles">
           <div class="camila__tile"><span class="camila__tnum">${fmtNum(heroB.total)}</span><span class="camila__tlbl">ejecuciones</span></div>
           <div class="camila__tile"><span class="camila__tnum camila__tnum--fail">${fmtNum(heroB.failed)}</span><span class="camila__tlbl">fallidas</span></div>
+          ${heroB.ext ? `<div class="camila__tile"><span class="camila__tnum camila__tnum--ext">${fmtNum(heroB.ext)}</span><span class="camila__tlbl">externas · no cuentan</span></div>` : ''}
           ${showTest ? `<div class="camila__tile"><span class="camila__tnum">${pctTxt(testB.eff)}</span><span class="camila__tlbl">test · ${fmtNum(testB.total)} ejec</span></div>` : ''}
         </div>
       </div>`;
     body.innerHTML = hero + `<div class="camila__list">${rows}</div>`;
     if (upd) upd.textContent = d.updatedAt ? ('actualizado ' + relTime(d.updatedAt)) : (d.syncing ? 'sincronizando…' : '');
     if (note) note.textContent = (d.warning ? '⚠️ ' + d.warning + '. ' : '') +
-      'Eficiencia = ejecuciones exitosas ÷ terminadas (en n8n), sobre los flujos de procesamiento de Camila (WhatsApp + IG/FB/WEB). No incluye el trigger de WhatsApp (eventos de Meta) ni ejecuciones en curso.' +
+      'Eficiencia = ejecuciones exitosas ÷ terminadas (en n8n), sobre los flujos de procesamiento de Camila (WhatsApp + IG/FB/WEB). No incluye el trigger de WhatsApp (eventos de Meta) ni ejecuciones en curso. Los fallos por servicios externos (Sword AI / inbox) no cuentan como error.' +
+      (heroB.ext ? ` ${fmtNum(heroB.ext)} excluida(s) por error externo en el rango.` : '') +
       (detailed ? (camExcludeTest ? ' Excluyendo ejecuciones de test.' : ' Incluyendo test en el total.') : ' Vista general por bot.');
   }
 

@@ -52,9 +52,10 @@ const BACKFILL_DAYS = Number(process.env.CAMILA_BACKFILL_DAYS || 120);   // hist
 const SYNC_MS       = Number(process.env.CAMILA_SYNC_MS || 5 * 60 * 1000);
 const MAX_PAGES     = Number(process.env.CAMILA_MAX_PAGES || 600);        // tope de seguridad (250/página)
 
-// Espejo en memoria: workflowId -> Map(execId -> { t:ms, prod:bool, ok:bool|null })
-//   ok === true  → success            ok === false → error/crashed
-//   ok === null  → en curso/otro estado (NO cuenta en el ratio)
+// Espejo en memoria: workflowId -> Map(execId -> { t:ms, prod:bool, st, chk })
+//   st: 'ok' success · 'fail' fallo real · 'ext' fallo por servicio externo
+//       (NO cuenta) · 'pend' en curso/otro (NO cuenta)
+//   chk: ¿ya inspeccionamos su error para ver si fue externo?
 const store = new Map();
 WORKFLOWS.forEach(w => store.set(w.id, new Map()));
 let lastSync = 0, ready = false, syncing = false, lastError = null;
@@ -74,11 +75,32 @@ function apiGet(pathQ) {
   });
 }
 
+// Hosts externos: si una ejecución FALLA por un error proveniente de estos
+// servicios (no es culpa de Camila), NO cuenta como fallo. Configurable.
+const EXT_HOSTS = String(process.env.CAMILA_EXT_HOSTS || 'app.swordaisolutions.com,whatsapp.neboaiconsulting.com')
+  .split(',').map(s => s.trim()).filter(Boolean);
+
+// Estado a partir de la LISTA (sin detalle del error todavía).
 const classify = e => ({
   t: Date.parse(e.startedAt || e.stoppedAt || '') || 0,
   prod: e.mode !== 'manual',
-  ok: e.status === 'success' ? true : (e.status === 'error' || e.status === 'crashed') ? false : null
+  st: e.status === 'success' ? 'ok' : (e.status === 'error' || e.status === 'crashed') ? 'fail' : 'pend',
+  chk: false
 });
+// ¿El error de una ejecución (traída con includeData) proviene de un host externo?
+function isExternalError(exec) {
+  try {
+    const rd = exec && exec.data && exec.data.resultData;
+    if (!rd || !rd.error) return false;
+    let blob = JSON.stringify(rd.error);
+    const last = rd.lastNodeExecuted;
+    if (last && rd.runData && rd.runData[last]) blob += JSON.stringify(rd.runData[last]);
+    return EXT_HOSTS.some(h => blob.includes(h));
+  } catch (_) { return false; }
+}
+// 'fail' y 'ext' son la misma "familia" (ejecución que terminó en error): al
+// re-sincronizar la lista no se debe perder la clasificación 'ext' ya hecha.
+const sameFam = (a, b) => a === b || (a !== 'ok' && a !== 'pend' && b !== 'ok' && b !== 'pend');
 const numId = v => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
 
 // Sincroniza UN workflow de forma incremental. En el primer arranque baja el
@@ -99,7 +121,9 @@ async function syncWorkflow(w, firstRun) {
       const rec = classify(e);
       if (rec.t && rec.t < horizon) { reachedOld = true; break; }   // ya pasamos el histórico
       const id = String(e.id);
-      if (!map.has(id)) added++;
+      const prev = map.get(id);
+      if (!prev) added++;
+      else if (sameFam(prev.st, rec.st)) { rec.st = prev.st; rec.chk = prev.chk; }  // conserva 'ext'/chk ya calculado
       map.set(id, rec);                                             // upsert (actualiza estados que cambiaron)
       minIdPage = Math.min(minIdPage, numId(id));
     }
@@ -114,7 +138,7 @@ async function syncWorkflow(w, firstRun) {
 
   // Refresca las ejecuciones que seguían "en curso" (por si ya terminaron).
   const pend = [];
-  for (const [id, v] of map) if (v.ok === null) pend.push(id);
+  for (const [id, v] of map) if (v.st === 'pend') pend.push(id);
   for (const id of pend.slice(0, 40)) {
     try { const e = await apiGet('/api/v1/executions/' + encodeURIComponent(id)); if (e && e.id != null) map.set(String(e.id), classify(e)); }
     catch (_) { /* si desapareció, se limpia abajo por horizonte */ }
@@ -122,6 +146,27 @@ async function syncWorkflow(w, firstRun) {
   // Poda lo más viejo que el horizonte para acotar memoria.
   for (const [id, v] of map) if (v.t && v.t < horizon) map.delete(id);
   return { wf: w.name, added, pages, capped };
+}
+
+// Inspecciona el error de las fallidas aún sin revisar (chk=false) y marca como
+// 'ext' las causadas por un host externo. Acotado por ciclo (budget) para no
+// saturar n8n; las que queden se revisan en los siguientes ciclos.
+async function checkExternals(budget) {
+  let checked = 0, ext = 0;
+  for (const w of WORKFLOWS) {
+    const map = store.get(w.id);
+    for (const [id, v] of map) {
+      if (checked >= budget) return { checked, ext };
+      if (v.st !== 'fail' || v.chk) continue;
+      try {
+        const e = await apiGet('/api/v1/executions/' + encodeURIComponent(id) + '?includeData=true');
+        if (isExternalError(e)) { v.st = 'ext'; ext++; }
+        v.chk = true;
+      } catch (_) { v.chk = true; }                     // si no se pudo, no reintentar en bucle infinito
+      checked++;
+    }
+  }
+  return { checked, ext };
 }
 
 async function syncAll() {
@@ -136,6 +181,11 @@ async function syncAll() {
     }
     lastSync = Date.now(); ready = true; if (!lastError || totAdded) lastError = anyCap ? 'histórico truncado por tope de páginas' : null;
     if (firstRun) console.log('[camila] backfill listo:', totAdded, 'ejecuciones' + (anyCap ? ' (truncado)' : ''));
+    // Reclasifica fallidas por error externo (acotado por ciclo).
+    try {
+      const r = await checkExternals(Number(process.env.CAMILA_EXT_BUDGET || 250));
+      if (firstRun && r.checked) console.log('[camila] fallidas inspeccionadas:', r.checked, '· externas:', r.ext);
+    } catch (e) { console.error('[camila] checkExternals', e.message); }
   } finally { syncing = false; }
 }
 
@@ -153,8 +203,8 @@ router.get('/camila-eficiencia', optionalAuth, wrap(async (req, res) => {
   const { from, to } = rangeOf(req);
   const f = Date.parse(from), t = Date.parse(to);
 
-  const blank = () => ({ total: 0, ok: 0, failed: 0 });
-  const add = (a, b) => { a.total += b.total; a.ok += b.ok; a.failed += b.failed; };
+  const blank = () => ({ total: 0, ok: 0, failed: 0, ext: 0 });
+  const add = (a, b) => { a.total += b.total; a.ok += b.ok; a.failed += b.failed; a.ext += b.ext; };
   const overall = { prod: blank(), test: blank() };
   const folders = new Map();
   const byWorkflow = [];
@@ -166,9 +216,10 @@ router.get('/camila-eficiencia', optionalAuth, wrap(async (req, res) => {
     for (const v of map.values()) {
       if (v.t && (oldest === 0 || v.t < oldest)) oldest = v.t;
       if (!v.t || v.t < f || v.t >= t) continue;
-      if (v.ok === null) continue;                    // en curso/cancelada: no cuenta
+      if (v.st === 'pend') continue;                  // en curso: no cuenta
       const b = v.prod ? prod : test;
-      b.total++; if (v.ok) b.ok++; else b.failed++;
+      if (v.st === 'ext') { b.ext++; continue; }       // error de servicio externo: NO cuenta como fallo
+      b.total++; if (v.st === 'ok') b.ok++; else b.failed++;
     }
     add(overall.prod, prod); add(overall.test, test);
     if (!folders.has(w.folder)) folders.set(w.folder, { folder: w.folder, prod: blank(), test: blank() });
@@ -176,7 +227,7 @@ router.get('/camila-eficiencia', optionalAuth, wrap(async (req, res) => {
     byWorkflow.push({ id: w.id, name: w.name, folder: w.folder, prod, test });
   }
 
-  const eff = o => ({ total: o.total, ok: o.ok, failed: o.failed, eff: o.total ? o.ok / o.total : null });
+  const eff = o => ({ total: o.total, ok: o.ok, failed: o.failed, ext: o.ext, eff: o.total ? o.ok / o.total : null });
   const pack = x => ({ prod: eff(x.prod), test: eff(x.test) });
   const detalle = esSuper(req);                        // ¿puede ver el desglose por workflow?
 
