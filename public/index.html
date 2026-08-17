@@ -185,6 +185,25 @@
             <button class="icon-btn" id="pipeRefresh" title="Actualizar">↻</button>
           </div>
         </div>
+        <div class="board__filters" id="pipeFilters">
+          <select id="pipeStage" class="chan-select" aria-label="Etapa">
+            <option value="">Todas las etapas</option>
+          </select>
+          <label class="flt">Desde <input type="date" id="pipeFrom" class="date-input" /></label>
+          <label class="flt">Hasta <input type="date" id="pipeTo" class="date-input" /></label>
+          <label class="flt">Monto
+            <input type="number" id="pipeAmountMin" class="num-input" placeholder="mín" min="0" step="0.01" />
+            <span class="flt__sep">–</span>
+            <input type="number" id="pipeAmountMax" class="num-input" placeholder="máx" min="0" step="0.01" aria-label="Monto máximo" />
+          </label>
+          <select id="pipeHasQuote" class="chan-select" aria-label="Cotización">
+            <option value="">Con y sin cotización</option>
+            <option value="1">Con cotización</option>
+            <option value="0">Sin cotización</option>
+          </select>
+          <button class="date-btn date-btn--clear" id="pipeClear" type="button" hidden>✕ Limpiar</button>
+          <span class="board__count" id="pipeCount"></span>
+        </div>
         <div class="board" id="boardWrap"><p class="board__err">Cargando…</p></div>
         <p class="card__note">Arrastra una tarjeta entre columnas para cambiar su etapa. Haz clic en una tarjeta para ver la cotización. Las oportunidades las genera n8n; también puedes moverlas a mano.</p>
       </section>

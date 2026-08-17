@@ -205,6 +205,26 @@ router.get('/opportunities', wrap(async (req, res) => {
     params.push('%' + search + '%');
     where += ` AND (title ILIKE $${params.length} OR phone ILIKE $${params.length} OR CAST(quote_number AS TEXT) ILIKE $${params.length})`;
   }
+  // Etapa concreta.
+  if (req.query.stageId) { params.push(Number(req.query.stageId)); where += ` AND stage_id = $${params.length}`; }
+  // Rango de fecha (created_at). Acepta YYYY-MM-DD (día completo) o ISO.
+  const from = String(req.query.from || '').trim();
+  const to = String(req.query.to || '').trim();
+  if (from) { params.push(from); where += ` AND created_at >= $${params.length}`; }
+  if (to) {
+    const dateOnly = /^\d{4}-\d{2}-\d{2}$/.test(to);
+    params.push(dateOnly ? to + 'T23:59:59.999' : to);
+    where += ` AND created_at <= $${params.length}`;
+  }
+  // Rango de monto de cotización (quote_amount).
+  const amountMin = req.query.amountMin, amountMax = req.query.amountMax;
+  if (amountMin !== undefined && amountMin !== '' && !isNaN(Number(amountMin))) { params.push(Number(amountMin)); where += ` AND quote_amount >= $${params.length}`; }
+  if (amountMax !== undefined && amountMax !== '' && !isNaN(Number(amountMax))) { params.push(Number(amountMax)); where += ` AND quote_amount <= $${params.length}`; }
+  // Con / sin cotización.
+  const hasQuote = String(req.query.hasQuote || '').trim();
+  if (hasQuote === '1' || hasQuote === 'true') where += ` AND quote_number IS NOT NULL`;
+  else if (hasQuote === '0' || hasQuote === 'false') where += ` AND quote_number IS NULL`;
+
   const r = await q(`SELECT * FROM opportunities WHERE ${where} ORDER BY stage_id, position DESC, id DESC`, params);
   res.json({ pipelineId: pid != null ? String(pid) : null, items: r.rows.map(shapeOpp) });
 }));

@@ -19,6 +19,8 @@
 
   let pipeline = null, stages = [], opps = [];
   let filterChannel = '', search = '', searchTimer = null, dragId = null, loaded = false, lastOverCol = null;
+  // Filtros adicionales del pipeline.
+  let filterStage = '', dateFrom = '', dateTo = '', amountMin = '', amountMax = '', hasQuote = '', amtTimer = null;
 
   function authHeaders() { return (window.Auth && Auth.currentToken) ? { Authorization: 'Bearer ' + Auth.currentToken } : {}; }
   async function api(url, opts) {
@@ -227,11 +229,40 @@
   }
   function closeViewer() { const v = $('#pdfViewer'); if (v) { v.hidden = true; $('#pdfFrame').src = 'about:blank'; } }
 
+  // ---- filtros ----
+  const anyFilter = () => !!(filterChannel || search || filterStage || dateFrom || dateTo || amountMin !== '' || amountMax !== '' || hasQuote);
+  function populateStages() {
+    const sel = $('#pipeStage'); if (!sel) return;
+    const cur = filterStage;
+    sel.innerHTML = '<option value="">Todas las etapas</option>' + stages.map(s => `<option value="${s.id}">${esc(s.name)}</option>`).join('');
+    sel.value = cur || '';
+  }
+  function updateFilterUi() {
+    const cnt = $('#pipeCount');
+    if (cnt) {
+      const tot = opps.reduce((a, o) => a + (Number(o.quoteAmount) || 0), 0);
+      cnt.textContent = `${opps.length} ${opps.length === 1 ? 'oportunidad' : 'oportunidades'}` + (tot ? ` · ${fmtRD(tot)}` : '');
+    }
+    const clr = $('#pipeClear'); if (clr) clr.hidden = !anyFilter();
+  }
+  function clearFilters() {
+    filterChannel = ''; search = ''; filterStage = ''; dateFrom = ''; dateTo = ''; amountMin = ''; amountMax = ''; hasQuote = '';
+    ['#pipeChan', '#pipeSearch', '#pipeStage', '#pipeFrom', '#pipeTo', '#pipeAmountMin', '#pipeAmountMax', '#pipeHasQuote']
+      .forEach(id => { const el = $(id); if (el) el.value = ''; });
+    load();
+  }
+
   async function load() {
     try {
       const params = new URLSearchParams();
       if (filterChannel) params.set('channel', filterChannel);
       if (search) params.set('search', search);
+      if (filterStage) params.set('stageId', filterStage);
+      if (dateFrom) params.set('from', dateFrom);
+      if (dateTo) params.set('to', dateTo);
+      if (amountMin !== '') params.set('amountMin', amountMin);
+      if (amountMax !== '') params.set('amountMax', amountMax);
+      if (hasQuote) params.set('hasQuote', hasQuote);
       // Siempre relee las etapas (por si se agregan/renombran/renumeran en el servidor)
       // y las oportunidades, en paralelo.
       const [p, o] = await Promise.all([
@@ -242,6 +273,8 @@
       stages = pipeline ? pipeline.stages : [];
       opps = o.items;
       render();
+      populateStages();
+      updateFilterUi();
     } catch (e) {
       $('#boardWrap').innerHTML = '<p class="board__err">Error: ' + esc(e.message) + '</p>';
     }
@@ -282,6 +315,15 @@
     $('#pipeChan').addEventListener('change', e => { filterChannel = e.target.value; load(); });
     $('#pipeSearch').addEventListener('input', e => { const v = e.target.value.trim(); clearTimeout(searchTimer); searchTimer = setTimeout(() => { search = v; load(); }, 350); });
     $('#pipeRefresh').addEventListener('click', () => load());
+    // Filtros adicionales
+    $('#pipeStage').addEventListener('change', e => { filterStage = e.target.value; load(); });
+    $('#pipeFrom').addEventListener('change', e => { dateFrom = e.target.value; load(); });
+    $('#pipeTo').addEventListener('change', e => { dateTo = e.target.value; load(); });
+    const amt = () => { amountMin = ($('#pipeAmountMin').value || '').trim(); amountMax = ($('#pipeAmountMax').value || '').trim(); clearTimeout(amtTimer); amtTimer = setTimeout(load, 450); };
+    $('#pipeAmountMin').addEventListener('input', amt);
+    $('#pipeAmountMax').addEventListener('input', amt);
+    $('#pipeHasQuote').addEventListener('change', e => { hasQuote = e.target.value; load(); });
+    $('#pipeClear').addEventListener('click', clearFilters);
     $('#quoteClose').addEventListener('click', closeQuote);
     $('#quoteModal').addEventListener('click', e => { if (e.target.id === 'quoteModal') closeQuote(); });
     // Botón "Ver" (delegado, porque el cuerpo del modal se reconstruye)
