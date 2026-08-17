@@ -475,3 +475,8 @@ table.msgs { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 .camcal__day { text-align: center; font-size: 12.5px; padding: 5px 0; color: var(--text-primary); font-variant-numeric: tabular-nums; }
 .camcal__day--other { color: var(--text-muted); opacity: .55; }
 .camcal__hint { margin-top: 9px; font-size: 11px; color: var(--text-muted); text-align: center; }
+
+/* Fila de modelo: más campos (%, $/msg, $/1M in, $/1M out) → permite envolver */
+.md-item { flex-wrap: wrap; }
+.md-field .pct__input, .md-coste, .md-new-coste { width: 80px; }
+.md-unit { font-size: 11px; font-weight: 600; margin-left: 1px; white-space: nowrap; }

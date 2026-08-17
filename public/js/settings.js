@@ -130,8 +130,10 @@
       const modelos = a.models.map(m => `
         <div class="md-item" data-model="${esc(m.id)}">
           <span class="md-name" title="GET /api/porcentaje?agent=${esc(a.slug)}&model=${esc(m.slug)}">${esc(m.name)}</span>
-          <span class="md-field"><input type="number" class="pct__input md-val" step="0.01" min="0" value="${esc(m.percent)}" /><span class="pct__sign">%</span></span>
-          <span class="md-field"><span class="md-cur">$</span><input type="number" class="pct__input md-coste" step="0.000001" min="0" value="${esc(m.coste)}" title="Coste de cobro por mensaje" /></span>
+          <span class="md-field" title="Margen: cobrado = coste × (1 + %/100)"><input type="number" class="pct__input md-val" step="0.01" min="0" value="${esc(m.percent)}" /><span class="pct__sign">%</span></span>
+          <span class="md-field" title="Coste de cobro por mensaje (USD)"><span class="md-cur">$</span><input type="number" class="pct__input md-coste" step="0.000001" min="0" value="${esc(m.coste)}" /><span class="pct__sign md-unit">/msg</span></span>
+          <span class="md-field" title="Precio por 1.000.000 de tokens de ENTRADA (USD)"><span class="md-cur">$</span><input type="number" class="pct__input md-pin" step="0.01" min="0" value="${esc(m.priceIn)}" /><span class="pct__sign md-unit">/1M in</span></span>
+          <span class="md-field" title="Precio por 1.000.000 de tokens de SALIDA (USD)"><span class="md-cur">$</span><input type="number" class="pct__input md-pout" step="0.01" min="0" value="${esc(m.priceOut)}" /><span class="pct__sign md-unit">/1M out</span></span>
           <button class="q__btn md-save" data-act="mdsave">Guardar</button>
           <button class="pct__item-del" data-act="mddel" title="Eliminar modelo">✕</button>
         </div>`).join('');
@@ -147,8 +149,10 @@
           <div class="md-list">${modelos || '<p class="muted small" style="margin:4px 0 8px">Sin modelos todavía.</p>'}</div>
           <div class="md-add">
             <input type="text" class="pct__name md-new-name" maxlength="60" placeholder="Modelo (ej. Deepseek)" />
-            <span class="md-field"><input type="number" class="pct__input md-new-val" step="0.01" min="0" placeholder="0" /><span class="pct__sign">%</span></span>
-            <span class="md-field"><span class="md-cur">$</span><input type="number" class="pct__input md-new-coste" step="0.000001" min="0" placeholder="0.03" title="Coste de cobro por mensaje" /></span>
+            <span class="md-field" title="Margen %"><input type="number" class="pct__input md-new-val" step="0.01" min="0" placeholder="0" /><span class="pct__sign">%</span></span>
+            <span class="md-field" title="Coste por mensaje (USD)"><span class="md-cur">$</span><input type="number" class="pct__input md-new-coste" step="0.000001" min="0" placeholder="0.03" /><span class="pct__sign md-unit">/msg</span></span>
+            <span class="md-field" title="Precio por 1M tokens de ENTRADA (USD)"><span class="md-cur">$</span><input type="number" class="pct__input md-new-pin" step="0.01" min="0" placeholder="0" /><span class="pct__sign md-unit">/1M in</span></span>
+            <span class="md-field" title="Precio por 1M tokens de SALIDA (USD)"><span class="md-cur">$</span><input type="number" class="pct__input md-new-pout" step="0.01" min="0" placeholder="0" /><span class="pct__sign md-unit">/1M out</span></span>
             <button class="q__btn md-add-btn" data-act="mdadd">Añadir modelo</button>
           </div>
         </div>
@@ -201,24 +205,34 @@
     const name = (agItem.querySelector('.md-new-name').value || '').trim();
     const val = Number(agItem.querySelector('.md-new-val').value);
     const costeRaw = agItem.querySelector('.md-new-coste').value;
+    const pinRaw = agItem.querySelector('.md-new-pin').value;
+    const poutRaw = agItem.querySelector('.md-new-pout').value;
     if (!name) { pctMsg('Escribe el nombre del modelo', 'err'); return; }
     if (!Number.isFinite(val) || val < 0) { pctMsg('Porcentaje inválido (≥ 0)', 'err'); return; }
     const coste = costeRaw === '' ? undefined : Number(costeRaw);
     if (coste != null && (!Number.isFinite(coste) || coste < 0)) { pctMsg('Coste inválido (≥ 0)', 'err'); return; }
+    const priceIn = pinRaw === '' ? undefined : Number(pinRaw);
+    const priceOut = poutRaw === '' ? undefined : Number(poutRaw);
+    if (priceIn != null && (!Number.isFinite(priceIn) || priceIn < 0)) { pctMsg('Precio de entrada inválido (≥ 0)', 'err'); return; }
+    if (priceOut != null && (!Number.isFinite(priceOut) || priceOut < 0)) { pctMsg('Precio de salida inválido (≥ 0)', 'err'); return; }
     pctMsg('Guardando…');
-    try { await api('/api/porcentaje/modelo', 'POST', { agentId, name, percent: val, coste }); abiertos.add(agentId); pctMsg('Modelo añadido ✓', 'ok'); await loadPercent(); }
+    try { await api('/api/porcentaje/modelo', 'POST', { agentId, name, percent: val, coste, priceIn, priceOut }); abiertos.add(agentId); pctMsg('Modelo añadido ✓', 'ok'); await loadPercent(); }
     catch (e) { pctMsg(e.message, 'err'); }
   }
   async function guardarModelo(mdItem, agentId) {
     const id = mdItem.dataset.model;
     const val = Number(mdItem.querySelector('.md-val').value);
     const coste = Number(mdItem.querySelector('.md-coste').value);
+    const priceIn = Number(mdItem.querySelector('.md-pin').value);
+    const priceOut = Number(mdItem.querySelector('.md-pout').value);
     const ag = agentes.find(a => a.id === agentId);
     const name = ((ag && ag.models.find(m => m.id === id)) || {}).name;
     if (!Number.isFinite(val) || val < 0) { pctMsg('Porcentaje inválido', 'err'); return; }
     if (!Number.isFinite(coste) || coste < 0) { pctMsg('Coste inválido', 'err'); return; }
+    if (!Number.isFinite(priceIn) || priceIn < 0) { pctMsg('Precio de entrada inválido', 'err'); return; }
+    if (!Number.isFinite(priceOut) || priceOut < 0) { pctMsg('Precio de salida inválido', 'err'); return; }
     pctMsg('Guardando…');
-    try { abiertos.add(agentId); await api('/api/porcentaje/modelo', 'POST', { id, name, percent: val, coste }); pctMsg('Guardado ✓', 'ok'); await loadPercent(); }
+    try { abiertos.add(agentId); await api('/api/porcentaje/modelo', 'POST', { id, name, percent: val, coste, priceIn, priceOut }); pctMsg('Guardado ✓', 'ok'); await loadPercent(); }
     catch (e) { pctMsg(e.message, 'err'); }
   }
   async function borrarModelo(mdItem, agentId) {
@@ -292,9 +306,10 @@
       });
       list.addEventListener('keydown', e => {
         if (e.key !== 'Enter') return;
-        const agItem = e.target.closest('.ag-item');
-        if (e.target.classList.contains('md-val')) guardarModelo(e.target.closest('.md-item'), agItem.dataset.agent);
-        else if (e.target.classList.contains('md-new-val') || e.target.classList.contains('md-new-name')) añadirModelo(agItem);
+        const el = e.target, agItem = el.closest('.ag-item');
+        if (!agItem) return;
+        if (el.closest('.md-item') && /\bmd-(val|coste|pin|pout)\b/.test(el.className)) guardarModelo(el.closest('.md-item'), agItem.dataset.agent);
+        else if (/\bmd-new-(name|val|coste|pin|pout)\b/.test(el.className)) añadirModelo(agItem);
       });
     }
   }

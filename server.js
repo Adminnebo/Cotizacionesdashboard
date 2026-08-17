@@ -173,7 +173,9 @@ app.post('/api/porcentaje/modelo', wrap(async (req, res) => {
       id: b.id, agentId: b.agentId != null ? b.agentId : b.agent_id,
       name: b.name != null ? b.name : b.nombre,
       percent: b.percent != null ? b.percent : b.porcentaje,
-      coste: b.coste != null ? b.coste : b.cost
+      coste: b.coste != null ? b.coste : b.cost,
+      priceIn: b.priceIn != null ? b.priceIn : b.price_in,
+      priceOut: b.priceOut != null ? b.priceOut : b.price_out
     });
     res.json({ ok: true, model: m });
   } catch (e) { res.status(e.status || 500).json({ error: e.message }); }
