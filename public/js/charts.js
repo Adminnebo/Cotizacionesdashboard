@@ -131,14 +131,16 @@
     const W = 720, H = cfg.height || 250, m = { t: 18, r: 54, b: 26, l: 44 };
     const data = cfg.data, series = cfg.series, n = data.length;
     const iw = W - m.l - m.r, ih = H - m.t - m.b;
+    const unit = cfg.unit || '';
     const vals = data.flatMap(d => series.map(s => d[s.key])).filter(v => v != null);
     let dataMin = vals.length ? Math.min(...vals) : 0;
     let dataMax = vals.length ? Math.max(...vals) : 1;
-    const lo0 = cfg.yMode === 'zero' ? 0 : dataMin;
-    const ax = axisRange(lo0, dataMax);
+    // yMode: 'auto' (mín–máx) · 'zero' (desde 0) · 'full' (0–100, para %)
+    const ax = cfg.yMode === 'full' ? { lo: 0, hi: 100, step: 20 }
+             : axisRange(cfg.yMode === 'zero' ? 0 : dataMin, dataMax);
     const X = i => m.l + (n <= 1 ? iw / 2 : (i / (n - 1)) * iw);
     const Y = v => m.t + ih - ((v - ax.lo) / (ax.hi - ax.lo)) * ih;
-    const fmtY = v => (ax.step >= 1 ? String(Math.round(v)) : String(v));
+    const fmtY = v => (ax.step >= 1 ? String(Math.round(v)) : String(v)) + unit;
 
     let g = '';
     for (let v = ax.lo; v <= ax.hi + 1e-9; v += ax.step) {
@@ -177,7 +179,7 @@
       i = Math.max(0, Math.min(n - 1, i));
       cross.setAttribute('x1', X(i)); cross.setAttribute('x2', X(i)); cross.setAttribute('opacity', '1');
       const d = data[i];
-      const rows = series.map(s => `<div class="tip__r"><span><i style="background:${s.color}"></i>${esc(s.label)}</span><b>${d[s.key] == null ? '—' : d[s.key]}</b></div>`).join('');
+      const rows = series.map(s => `<div class="tip__r"><span><i style="background:${s.color}"></i>${esc(s.label)}</span><b>${d[s.key] == null ? '—' : (unit === '%' ? Math.round(d[s.key]) + '%' : d[s.key])}</b></div>`).join('');
       showTip(`<div class="tip__t">${esc(cfg.xLabel ? cfg.xLabel(d, i) : d.d)}</div>${rows}`, ev);
     });
     ov.addEventListener('mouseleave', () => { cross.setAttribute('opacity', '0'); hideTip(); });

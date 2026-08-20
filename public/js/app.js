@@ -570,19 +570,21 @@
     if (testWrap) testWrap.hidden = !hasTest;                 // el toggle de test solo para super con datos de test
     const useTest = hasTest && camTrendTest;
 
-    // Combina prod (+ test si corresponde) en dos series: exitosas y fallidas.
-    const data = raw.map(x => ({
-      d: x.d,
-      ok:   (x.okProd   || 0) + (useTest ? (x.okTest   || 0) : 0),
-      fail: (x.failProd || 0) + (useTest ? (x.failTest || 0) : 0)
-    }));
+    // Combina prod (+ test si corresponde) y lo pasa a % por día. Los días sin
+    // ejecuciones quedan en null (hueco en la línea, no un 0% falso).
+    const data = raw.map(x => {
+      const ok   = (x.okProd   || 0) + (useTest ? (x.okTest   || 0) : 0);
+      const fail = (x.failProd || 0) + (useTest ? (x.failTest || 0) : 0);
+      const tot  = ok + fail;
+      return { d: x.d, ok: tot ? ok / tot * 100 : null, fail: tot ? fail / tot * 100 : null };
+    });
     const series = [
-      { key: 'ok',   label: 'Exitosas', color: '#10b981' },
-      { key: 'fail', label: 'Fallidas', color: '#ef4444' }
+      { key: 'ok',   label: '% éxito', color: '#10b981' },
+      { key: 'fail', label: '% fallo', color: '#ef4444' }
     ];
     box.hidden = false;
     if (leg) leg.innerHTML = series.map(s => `<span class="camila__legitem"><i style="background:${s.color}"></i>${escapeHtml(s.label)}</span>`).join('');
-    Charts.trendChart(el, { data, series, yMode: camTrendAmp, xLabel: x => dayLabel(x.d), height: 230 });
+    Charts.trendChart(el, { data, series, yMode: camTrendAmp, unit: '%', xLabel: x => dayLabel(x.d), height: 230 });
   }
 
   async function loadCamila() {
