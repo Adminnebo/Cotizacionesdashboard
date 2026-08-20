@@ -348,6 +348,7 @@
   const CAM_DAY = 86400000;
   let camInited = false, camDrag = null, camDetail = false;   // camDetail: vista detallada (solo super admin)
   let camAgentFilter = 'all', camExcludeTest = true;          // filtros del detallado
+  let camTrendTest = false, camTrendAmp = 'auto';             // gráfica: incluir test / amplitud del eje
   let camCalMonth = 0, camWeekAnchor = null;                  // calendario de semanas
   let camDomA = 0, camDomB = 0, camFrom = 0, camTo = 0;   // dominio y selección (ms)
 
@@ -555,19 +556,33 @@
       (detailed ? (camExcludeTest ? ' Excluyendo ejecuciones de test.' : ' Incluyendo test en el total.') : ' Vista general por bot.');
   }
 
-  // Gráfica de eficiencia (%) en el tiempo, debajo de la tarjeta. Línea de
-  // producción siempre; la de test solo para super_admin y si hay datos de test.
+  // Gráfica en el tiempo, debajo de la tarjeta: conteo de ejecuciones EXITOSAS vs
+  // FALLIDAS por día. Toggle para incluir/excluir test (solo super_admin) y control
+  // de amplitud del eje (auto mín–máx o desde 0).
   function renderCamilaTrend(d) {
     const box = $('#camilaTrend'), el = $('#camilaChart'), leg = $('#camilaTrendLegend');
+    const testWrap = $('#camilaTrendTestWrap');
     if (!box || !el) return;
-    const data = Array.isArray(d.series) ? d.series : [];
-    const hasProd = data.some(x => x.prod != null);
-    if (!data.length || !hasProd) { box.hidden = true; el.innerHTML = ''; return; }
-    const series = [{ key: 'prod', countKey: 'prodTotal', label: 'Producción', color: '#3b82f6' }];
-    if (d.canDetail && data.some(x => x.test != null)) series.push({ key: 'test', countKey: 'testTotal', label: 'Test', color: '#f59e0b' });
+    const raw = Array.isArray(d.series) ? d.series : [];
+    if (!raw.length) { box.hidden = true; el.innerHTML = ''; return; }
+
+    const hasTest = d.canDetail && raw.some(x => (x.okTest || 0) + (x.failTest || 0) > 0);
+    if (testWrap) testWrap.hidden = !hasTest;                 // el toggle de test solo para super con datos de test
+    const useTest = hasTest && camTrendTest;
+
+    // Combina prod (+ test si corresponde) en dos series: exitosas y fallidas.
+    const data = raw.map(x => ({
+      d: x.d,
+      ok:   (x.okProd   || 0) + (useTest ? (x.okTest   || 0) : 0),
+      fail: (x.failProd || 0) + (useTest ? (x.failTest || 0) : 0)
+    }));
+    const series = [
+      { key: 'ok',   label: 'Exitosas', color: '#10b981' },
+      { key: 'fail', label: 'Fallidas', color: '#ef4444' }
+    ];
     box.hidden = false;
     if (leg) leg.innerHTML = series.map(s => `<span class="camila__legitem"><i style="background:${s.color}"></i>${escapeHtml(s.label)}</span>`).join('');
-    Charts.effChart(el, { data, series, xLabel: x => dayLabel(x.d), height: 230 });
+    Charts.trendChart(el, { data, series, yMode: camTrendAmp, xLabel: x => dayLabel(x.d), height: 230 });
   }
 
   async function loadCamila() {
@@ -710,6 +725,9 @@
       renderCamila();
     });
     $('#camilaExclTest').addEventListener('change', e => { camExcludeTest = e.target.checked; renderCamila(); });
+    // Controles de la gráfica en el tiempo (no recargan datos, solo re-dibujan).
+    $('#camilaTrendTest').addEventListener('change', e => { camTrendTest = e.target.checked; if (camilaData) renderCamilaTrend(camilaData); });
+    $('#camilaTrendAmp').addEventListener('change', e => { camTrendAmp = e.target.value; if (camilaData) renderCamilaTrend(camilaData); });
     // Calendario de semanas completas.
     $('#camilaCalBtn').addEventListener('click', e => { e.stopPropagation(); camToggleCal(); });
     $('#camilaCal').addEventListener('click', e => {

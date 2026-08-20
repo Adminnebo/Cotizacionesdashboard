@@ -403,8 +403,12 @@ table.msgs { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 .camila__list { display: flex; flex-direction: column; gap: 9px; }
 /* Gráfica de eficiencia en el tiempo (debajo de la tarjeta) */
 .camila__trend { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border-soft); }
-.camila__trendhead { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin-bottom: 6px; }
+.camila__trendhead { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; margin-bottom: 6px; }
 .camila__trendtitle { font-size: 13px; font-weight: 700; letter-spacing: .01em; }
+.camila__trendctrls { display: flex; align-items: center; flex-wrap: wrap; gap: 14px; }
+.camila__trendtest { font-size: 12px; }
+.camila__amp { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-muted); }
+.camila__amp select { font: inherit; font-size: 12px; padding: 3px 6px; border-radius: 7px; border: 1px solid var(--border); background: var(--surface-1); color: var(--text); cursor: pointer; }
 .camila__legend { display: flex; gap: 14px; }
 .camila__legitem { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-muted); }
 .camila__legitem i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }

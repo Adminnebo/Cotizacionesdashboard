@@ -232,19 +232,20 @@ router.get('/camila-eficiencia', optionalAuth, wrap(async (req, res) => {
   // El test es un concepto interno: solo el super_admin lo recibe.
   const pack = x => detalle ? { prod: eff(x.prod), test: eff(x.test) } : { prod: eff(x.prod) };
 
-  // Serie diaria de eficiencia (%) para la gráfica en el tiempo. Un punto por día;
-  // los días sin ejecuciones quedan en null (hueco en la línea, no un 0% falso).
+  // Serie diaria para la gráfica en el tiempo: conteo de ejecuciones EXITOSAS y
+  // FALLIDAS por día (los errores externos y las en curso no cuentan). Se separa
+  // prod de test para que el front pueda incluir/excluir test con un toggle.
   const DAY = 86400000;
   const dayKey = ms => new Date(ms).toISOString().slice(0, 10);
-  const buckets = new Map();                           // 'YYYY-MM-DD' -> { pOk, pTot, tOk, tTot }
+  const buckets = new Map();                           // 'YYYY-MM-DD' -> { pOk, pFail, tOk, tFail }
   for (const w of WORKFLOWS) {
     for (const v of (store.get(w.id) || new Map()).values()) {
       if (!v.t || v.t < f || v.t >= t) continue;
       if (v.st === 'pend' || v.st === 'ext') continue; // en curso / error externo: no cuentan
       const k = dayKey(v.t);
-      let bk = buckets.get(k); if (!bk) buckets.set(k, bk = { pOk: 0, pTot: 0, tOk: 0, tTot: 0 });
-      if (v.prod) { bk.pTot++; if (v.st === 'ok') bk.pOk++; }
-      else        { bk.tTot++; if (v.st === 'ok') bk.tOk++; }
+      let bk = buckets.get(k); if (!bk) buckets.set(k, bk = { pOk: 0, pFail: 0, tOk: 0, tFail: 0 });
+      if (v.prod) { if (v.st === 'ok') bk.pOk++; else bk.pFail++; }
+      else        { if (v.st === 'ok') bk.tOk++; else bk.tFail++; }
     }
   }
   // Se acota al horizonte del espejo (no hay datos más viejos) para no generar
@@ -253,9 +254,9 @@ router.get('/camila-eficiencia', optionalAuth, wrap(async (req, res) => {
   const series = [];
   for (let dms = startMs; dms < t && series.length < 400; dms += DAY) {
     const k = new Date(dms).toISOString().slice(0, 10);
-    const bk = buckets.get(k);
-    const row = { d: k, prod: bk && bk.pTot ? bk.pOk / bk.pTot : null, prodTotal: bk ? bk.pTot : 0 };
-    if (detalle) { row.test = bk && bk.tTot ? bk.tOk / bk.tTot : null; row.testTotal = bk ? bk.tTot : 0; }
+    const bk = buckets.get(k) || { pOk: 0, pFail: 0, tOk: 0, tFail: 0 };
+    const row = { d: k, okProd: bk.pOk, failProd: bk.pFail };
+    if (detalle) { row.okTest = bk.tOk; row.failTest = bk.tFail; }   // test solo para super_admin
     series.push(row);
   }
 

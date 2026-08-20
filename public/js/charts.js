@@ -114,39 +114,55 @@
     });
   }
 
-  // ---------- eficiencia en el tiempo (%, eje fijo 0–100, huecos en días sin datos) ----------
-  // data: [{ d, <key>: 0..1|null, <countKey>: n }]  ·  series: [{ key, countKey, label, color }]
-  function effChart(el, cfg) {
-    const W = 720, H = cfg.height || 250, m = { t: 18, r: 62, b: 26, l: 46 };
+  // Escala "bonita" entre lo y hi con ~4 pasos (enteros si el paso ≥ 1).
+  function axisRange(lo, hi) {
+    if (!(hi > lo)) hi = lo + 1;                          // evita línea plana / división por cero
+    const rawStep = (hi - lo) / 4;
+    const mag = Math.pow(10, Math.floor(Math.log10(rawStep)));
+    const norm = rawStep / mag;
+    const step = (norm <= 1 ? 1 : norm <= 2 ? 2 : norm <= 5 ? 5 : 10) * mag;
+    return { lo: Math.floor(lo / step) * step, hi: Math.ceil(hi / step) * step, step };
+  }
+
+  // ---------- tendencia en el tiempo (varias líneas, eje Y dinámico, huecos en null) ----------
+  // data: [{ d, <key>: n|null }]  ·  series: [{ key, label, color }]
+  // cfg.yMode: 'auto' (mín–máx de los datos) | 'zero' (desde 0)  ·  cfg.xLabel(d,i)
+  function trendChart(el, cfg) {
+    const W = 720, H = cfg.height || 250, m = { t: 18, r: 54, b: 26, l: 44 };
     const data = cfg.data, series = cfg.series, n = data.length;
     const iw = W - m.l - m.r, ih = H - m.t - m.b;
+    const vals = data.flatMap(d => series.map(s => d[s.key])).filter(v => v != null);
+    let dataMin = vals.length ? Math.min(...vals) : 0;
+    let dataMax = vals.length ? Math.max(...vals) : 1;
+    const lo0 = cfg.yMode === 'zero' ? 0 : dataMin;
+    const ax = axisRange(lo0, dataMax);
     const X = i => m.l + (n <= 1 ? iw / 2 : (i / (n - 1)) * iw);
-    const Y = p => m.t + ih - (p / 100) * ih;              // p en %
-    const pv = (d, k) => (d[k] == null ? null : d[k] * 100);
+    const Y = v => m.t + ih - ((v - ax.lo) / (ax.hi - ax.lo)) * ih;
+    const fmtY = v => (ax.step >= 1 ? String(Math.round(v)) : String(v));
 
     let g = '';
-    for (let v = 0; v <= 100; v += 25) {
+    for (let v = ax.lo; v <= ax.hi + 1e-9; v += ax.step) {
       const y = Y(v);
       g += `<line class="gridline" x1="${m.l}" y1="${y}" x2="${m.l + iw}" y2="${y}"/>`;
-      g += `<text class="axis" x="${m.l - 8}" y="${y + 3}" text-anchor="end">${v}%</text>`;
+      g += `<text class="axis" x="${m.l - 8}" y="${y + 3}" text-anchor="end">${fmtY(v)}</text>`;
     }
     const stepL = Math.max(1, Math.ceil(n / 6));
     for (let i = 0; i < n; i += stepL) {
       g += `<text class="axis" x="${X(i)}" y="${H - 8}" text-anchor="middle">${esc(cfg.xLabel ? cfg.xLabel(data[i], i) : data[i].d)}</text>`;
     }
     series.forEach(s => {
-      // La línea se corta en los huecos (días sin ejecuciones): cada tramo es su propio polyline.
-      let seg = [], lastI = -1, lastP = null;
+      // La línea se corta en los huecos (días sin dato): cada tramo es su propio polyline.
+      let seg = [], lastI = -1, lastV = null;
       const flush = () => {
         if (seg.length > 1) g += `<polyline points="${seg.join(' ')}" fill="none" stroke="${s.color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`;
         else if (seg.length === 1) { const [x, y] = seg[0].split(','); g += `<circle cx="${x}" cy="${y}" r="2.6" fill="${s.color}"/>`; }
         seg = [];
       };
-      data.forEach((d, i) => { const p = pv(d, s.key); if (p == null) flush(); else { seg.push(`${X(i)},${Y(p)}`); lastI = i; lastP = p; } });
+      data.forEach((d, i) => { const v = d[s.key]; if (v == null) flush(); else { seg.push(`${X(i)},${Y(v)}`); lastI = i; lastV = v; } });
       flush();
       if (lastI >= 0) {
-        g += `<circle class="enddot" cx="${X(lastI)}" cy="${Y(lastP)}" r="3.5" fill="${s.color}"/>`;
-        g += `<text class="axis" x="${m.l + iw + 6}" y="${Y(lastP) + 3}" text-anchor="start" fill="${s.color}" style="font-weight:700">${Math.round(lastP)}%</text>`;
+        g += `<circle class="enddot" cx="${X(lastI)}" cy="${Y(lastV)}" r="3.5" fill="${s.color}"/>`;
+        g += `<text class="axis" x="${m.l + iw + 6}" y="${Y(lastV) + 3}" text-anchor="start" fill="${s.color}" style="font-weight:700">${fmtY(lastV)}</text>`;
       }
     });
     g += `<line class="cross" x1="0" y1="${m.t}" x2="0" y2="${m.t + ih}" stroke-dasharray="3 3" opacity="0"/>`;
@@ -161,14 +177,11 @@
       i = Math.max(0, Math.min(n - 1, i));
       cross.setAttribute('x1', X(i)); cross.setAttribute('x2', X(i)); cross.setAttribute('opacity', '1');
       const d = data[i];
-      const rows = series.map(s => {
-        const p = pv(d, s.key), nn = d[s.countKey] || 0;
-        return `<div class="tip__r"><span><i style="background:${s.color}"></i>${esc(s.label)}</span><b>${p == null ? '—' : Math.round(p) + '% · ' + nn + ' ejec'}</b></div>`;
-      }).join('');
+      const rows = series.map(s => `<div class="tip__r"><span><i style="background:${s.color}"></i>${esc(s.label)}</span><b>${d[s.key] == null ? '—' : d[s.key]}</b></div>`).join('');
       showTip(`<div class="tip__t">${esc(cfg.xLabel ? cfg.xLabel(d, i) : d.d)}</div>${rows}`, ev);
     });
     ov.addEventListener('mouseleave', () => { cross.setAttribute('opacity', '0'); hideTip(); });
   }
 
-  global.Charts = { lineChart, groupedBar, effChart };
+  global.Charts = { lineChart, groupedBar, trendChart };
 })(window);
