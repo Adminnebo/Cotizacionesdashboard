@@ -509,6 +509,7 @@
     if (d.available === false) {
       body.innerHTML = `<p class="card__note">Métrica no disponible: ${escapeHtml(d.error || 'n8n no configurado')}.</p>`;
       if (upd) upd.textContent = ''; if (note) note.textContent = '';
+      const tr = $('#camilaTrend'); if (tr) tr.hidden = true;
       if (seg) seg.hidden = true; if (dctrls) dctrls.hidden = true; return;
     }
     // El toggle detallado es SOLO para super_admin; el cliente ve siempre lo agrupado.
@@ -534,7 +535,8 @@
 
     const cls = effClass(heroB.eff);
     const heroLbl = (detailed && !camExcludeTest) ? 'eficiencia · prod + test' : 'eficiencia · producción';
-    const showTest = testB && testB.total > 0 && (camExcludeTest || !detailed);
+    // El dato de test es SOLO para super admin (usuario y admin no lo ven).
+    const showTest = d.canDetail && testB && testB.total > 0 && (camExcludeTest || !detailed);
     const hero = `<div class="camila__hero">
         <div class="camila__big camila__big--${cls}">${pctTxt(heroB.eff)}<span class="camila__biglbl">${heroLbl}</span></div>
         <div class="camila__tiles">
@@ -545,11 +547,27 @@
         </div>
       </div>`;
     body.innerHTML = hero + `<div class="camila__list">${rows}</div>`;
+    renderCamilaTrend(d);
     if (upd) upd.textContent = d.updatedAt ? ('actualizado ' + relTime(d.updatedAt)) : (d.syncing ? 'sincronizando…' : '');
     if (note) note.textContent = (d.warning ? '⚠️ ' + d.warning + '. ' : '') +
       'Eficiencia = ejecuciones exitosas ÷ terminadas (en n8n), sobre los flujos de procesamiento de Camila (WhatsApp + IG/FB/WEB). No incluye el trigger de WhatsApp (eventos de Meta) ni ejecuciones en curso. Los fallos por servicios externos (Sword AI / inbox) no cuentan como error.' +
       (heroB.ext ? ` ${fmtNum(heroB.ext)} excluida(s) por error externo en el rango.` : '') +
       (detailed ? (camExcludeTest ? ' Excluyendo ejecuciones de test.' : ' Incluyendo test en el total.') : ' Vista general por bot.');
+  }
+
+  // Gráfica de eficiencia (%) en el tiempo, debajo de la tarjeta. Línea de
+  // producción siempre; la de test solo para super_admin y si hay datos de test.
+  function renderCamilaTrend(d) {
+    const box = $('#camilaTrend'), el = $('#camilaChart'), leg = $('#camilaTrendLegend');
+    if (!box || !el) return;
+    const data = Array.isArray(d.series) ? d.series : [];
+    const hasProd = data.some(x => x.prod != null);
+    if (!data.length || !hasProd) { box.hidden = true; el.innerHTML = ''; return; }
+    const series = [{ key: 'prod', countKey: 'prodTotal', label: 'Producción', color: '#3b82f6' }];
+    if (d.canDetail && data.some(x => x.test != null)) series.push({ key: 'test', countKey: 'testTotal', label: 'Test', color: '#f59e0b' });
+    box.hidden = false;
+    if (leg) leg.innerHTML = series.map(s => `<span class="camila__legitem"><i style="background:${s.color}"></i>${escapeHtml(s.label)}</span>`).join('');
+    Charts.effChart(el, { data, series, xLabel: x => dayLabel(x.d), height: 230 });
   }
 
   async function loadCamila() {

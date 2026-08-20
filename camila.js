@@ -228,8 +228,36 @@ router.get('/camila-eficiencia', optionalAuth, wrap(async (req, res) => {
   }
 
   const eff = o => ({ total: o.total, ok: o.ok, failed: o.failed, ext: o.ext, eff: o.total ? o.ok / o.total : null });
-  const pack = x => ({ prod: eff(x.prod), test: eff(x.test) });
-  const detalle = esSuper(req);                        // ¿puede ver el desglose por workflow?
+  const detalle = esSuper(req);                        // ¿puede ver el desglose por workflow y las de test?
+  // El test es un concepto interno: solo el super_admin lo recibe.
+  const pack = x => detalle ? { prod: eff(x.prod), test: eff(x.test) } : { prod: eff(x.prod) };
+
+  // Serie diaria de eficiencia (%) para la gráfica en el tiempo. Un punto por día;
+  // los días sin ejecuciones quedan en null (hueco en la línea, no un 0% falso).
+  const DAY = 86400000;
+  const dayKey = ms => new Date(ms).toISOString().slice(0, 10);
+  const buckets = new Map();                           // 'YYYY-MM-DD' -> { pOk, pTot, tOk, tTot }
+  for (const w of WORKFLOWS) {
+    for (const v of (store.get(w.id) || new Map()).values()) {
+      if (!v.t || v.t < f || v.t >= t) continue;
+      if (v.st === 'pend' || v.st === 'ext') continue; // en curso / error externo: no cuentan
+      const k = dayKey(v.t);
+      let bk = buckets.get(k); if (!bk) buckets.set(k, bk = { pOk: 0, pTot: 0, tOk: 0, tTot: 0 });
+      if (v.prod) { bk.pTot++; if (v.st === 'ok') bk.pOk++; }
+      else        { bk.tTot++; if (v.st === 'ok') bk.tOk++; }
+    }
+  }
+  // Se acota al horizonte del espejo (no hay datos más viejos) para no generar
+  // miles de puntos cuando el rango es "todo".
+  const startMs = Math.max(Date.parse(dayKey(f) + 'T00:00:00.000Z'), Date.now() - BACKFILL_DAYS * DAY);
+  const series = [];
+  for (let dms = startMs; dms < t && series.length < 400; dms += DAY) {
+    const k = new Date(dms).toISOString().slice(0, 10);
+    const bk = buckets.get(k);
+    const row = { d: k, prod: bk && bk.pTot ? bk.pOk / bk.pTot : null, prodTotal: bk ? bk.pTot : 0 };
+    if (detalle) { row.test = bk && bk.tTot ? bk.tOk / bk.tTot : null; row.testTotal = bk ? bk.tTot : 0; }
+    series.push(row);
+  }
 
   res.json({
     available: true,
@@ -242,6 +270,7 @@ router.get('/camila-eficiencia', optionalAuth, wrap(async (req, res) => {
     oldestAt: oldest ? new Date(oldest).toISOString() : null,
     range: { from, to },
     overall: pack(overall),
+    series,                                             // eficiencia diaria en el tiempo (para la gráfica)
     byFolder: [...folders.values()].map(x => ({ folder: x.folder, ...pack(x) })),
     // El detalle por workflow SOLO se envía al super_admin (no se filtra al cliente).
     byWorkflow: detalle ? byWorkflow.map(x => ({ id: x.id, name: x.name, folder: x.folder, ...pack(x) })) : undefined

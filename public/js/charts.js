@@ -114,5 +114,61 @@
     });
   }
 
-  global.Charts = { lineChart, groupedBar };
+  // ---------- eficiencia en el tiempo (%, eje fijo 0–100, huecos en días sin datos) ----------
+  // data: [{ d, <key>: 0..1|null, <countKey>: n }]  ·  series: [{ key, countKey, label, color }]
+  function effChart(el, cfg) {
+    const W = 720, H = cfg.height || 250, m = { t: 18, r: 62, b: 26, l: 46 };
+    const data = cfg.data, series = cfg.series, n = data.length;
+    const iw = W - m.l - m.r, ih = H - m.t - m.b;
+    const X = i => m.l + (n <= 1 ? iw / 2 : (i / (n - 1)) * iw);
+    const Y = p => m.t + ih - (p / 100) * ih;              // p en %
+    const pv = (d, k) => (d[k] == null ? null : d[k] * 100);
+
+    let g = '';
+    for (let v = 0; v <= 100; v += 25) {
+      const y = Y(v);
+      g += `<line class="gridline" x1="${m.l}" y1="${y}" x2="${m.l + iw}" y2="${y}"/>`;
+      g += `<text class="axis" x="${m.l - 8}" y="${y + 3}" text-anchor="end">${v}%</text>`;
+    }
+    const stepL = Math.max(1, Math.ceil(n / 6));
+    for (let i = 0; i < n; i += stepL) {
+      g += `<text class="axis" x="${X(i)}" y="${H - 8}" text-anchor="middle">${esc(cfg.xLabel ? cfg.xLabel(data[i], i) : data[i].d)}</text>`;
+    }
+    series.forEach(s => {
+      // La línea se corta en los huecos (días sin ejecuciones): cada tramo es su propio polyline.
+      let seg = [], lastI = -1, lastP = null;
+      const flush = () => {
+        if (seg.length > 1) g += `<polyline points="${seg.join(' ')}" fill="none" stroke="${s.color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`;
+        else if (seg.length === 1) { const [x, y] = seg[0].split(','); g += `<circle cx="${x}" cy="${y}" r="2.6" fill="${s.color}"/>`; }
+        seg = [];
+      };
+      data.forEach((d, i) => { const p = pv(d, s.key); if (p == null) flush(); else { seg.push(`${X(i)},${Y(p)}`); lastI = i; lastP = p; } });
+      flush();
+      if (lastI >= 0) {
+        g += `<circle class="enddot" cx="${X(lastI)}" cy="${Y(lastP)}" r="3.5" fill="${s.color}"/>`;
+        g += `<text class="axis" x="${m.l + iw + 6}" y="${Y(lastP) + 3}" text-anchor="start" fill="${s.color}" style="font-weight:700">${Math.round(lastP)}%</text>`;
+      }
+    });
+    g += `<line class="cross" x1="0" y1="${m.t}" x2="0" y2="${m.t + ih}" stroke-dasharray="3 3" opacity="0"/>`;
+    g += `<rect class="ov" x="${m.l}" y="${m.t}" width="${iw}" height="${ih}" fill="transparent"/>`;
+    el.innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img">${g}</svg>`;
+
+    const svg = el.querySelector('svg'), cross = el.querySelector('.cross'), ov = el.querySelector('.ov');
+    ov.addEventListener('mousemove', ev => {
+      const r = svg.getBoundingClientRect();
+      const px = (ev.clientX - r.left) / r.width * W;
+      let i = Math.round((px - m.l) / (iw / Math.max(1, n - 1)));
+      i = Math.max(0, Math.min(n - 1, i));
+      cross.setAttribute('x1', X(i)); cross.setAttribute('x2', X(i)); cross.setAttribute('opacity', '1');
+      const d = data[i];
+      const rows = series.map(s => {
+        const p = pv(d, s.key), nn = d[s.countKey] || 0;
+        return `<div class="tip__r"><span><i style="background:${s.color}"></i>${esc(s.label)}</span><b>${p == null ? '—' : Math.round(p) + '% · ' + nn + ' ejec'}</b></div>`;
+      }).join('');
+      showTip(`<div class="tip__t">${esc(cfg.xLabel ? cfg.xLabel(d, i) : d.d)}</div>${rows}`, ev);
+    });
+    ov.addEventListener('mouseleave', () => { cross.setAttribute('opacity', '0'); hideTip(); });
+  }
+
+  global.Charts = { lineChart, groupedBar, effChart };
 })(window);
