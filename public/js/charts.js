@@ -126,27 +126,22 @@
 
   // ---------- tendencia en el tiempo (varias líneas, eje Y dinámico, huecos en null) ----------
   // data: [{ d, <key>: n|null }]  ·  series: [{ key, label, color }]
-  // cfg.yMode: 'auto' (mín–máx de los datos) | 'zero' (desde 0)  ·  cfg.xLabel(d,i)
+  // cfg.yMin / cfg.yMax: límites del eje (null = automático mín–máx)  ·  cfg.unit  ·  cfg.xLabel(d,i)
   function trendChart(el, cfg) {
-    const m = { t: 18, r: 54, b: 26, l: 44 };
+    const W = 720, H = cfg.height || 250, m = { t: 18, r: 54, b: 26, l: 44 };
     const data = cfg.data, series = cfg.series, n = data.length;
-    // Ancho/alto NATURALES (en px): si hay muchos puntos el SVG crece y el
-    // contenedor lo desplaza con scroll horizontal; el alto supera el viewport
-    // para permitir scroll vertical y así inspeccionar puntos concretos.
-    const cw = Math.max(320, el.clientWidth || 700);
-    const PX = cfg.pxPerPoint || 22;                       // separación mínima por día
-    const W = Math.max(cw, m.l + m.r + Math.max(1, n - 1) * PX);
-    const H = cfg.height || 250;
     const iw = W - m.l - m.r, ih = H - m.t - m.b;
     const unit = cfg.unit || '';
     const vals = data.flatMap(d => series.map(s => d[s.key])).filter(v => v != null);
     let dataMin = vals.length ? Math.min(...vals) : 0;
     let dataMax = vals.length ? Math.max(...vals) : 1;
-    // yMode: 'auto' (mín–máx) · 'zero' (desde 0) · 'full' (0–100, para %)
-    const ax = cfg.yMode === 'full' ? { lo: 0, hi: 100, step: 20 }
-             : axisRange(cfg.yMode === 'zero' ? 0 : dataMin, dataMax);
+    // Límites del eje: manuales (cfg.yMin / cfg.yMax) o automáticos (mín–máx de los datos).
+    const lo0 = cfg.yMin != null ? cfg.yMin : dataMin;
+    const hi0 = cfg.yMax != null ? cfg.yMax : dataMax;
+    const ax = axisRange(lo0, hi0);
     const X = i => m.l + (n <= 1 ? iw / 2 : (i / (n - 1)) * iw);
     const Y = v => m.t + ih - ((v - ax.lo) / (ax.hi - ax.lo)) * ih;
+    const Yc = v => Math.max(m.t, Math.min(m.t + ih, Y(v)));   // recorta al área del plot
     const fmtY = v => (ax.step >= 1 ? String(Math.round(v)) : String(v)) + unit;
 
     let g = '';
@@ -155,7 +150,7 @@
       g += `<line class="gridline" x1="${m.l}" y1="${y}" x2="${m.l + iw}" y2="${y}"/>`;
       g += `<text class="axis" x="${m.l - 8}" y="${y + 3}" text-anchor="end">${fmtY(v)}</text>`;
     }
-    const stepL = Math.max(1, Math.ceil(n / Math.max(6, Math.floor(iw / 70))));   // ~1 etiqueta cada 70px
+    const stepL = Math.max(1, Math.ceil(n / 6));
     for (let i = 0; i < n; i += stepL) {
       g += `<text class="axis" x="${X(i)}" y="${H - 8}" text-anchor="middle">${esc(cfg.xLabel ? cfg.xLabel(data[i], i) : data[i].d)}</text>`;
     }
@@ -167,17 +162,16 @@
         else if (seg.length === 1) { const [x, y] = seg[0].split(','); g += `<circle cx="${x}" cy="${y}" r="2.6" fill="${s.color}"/>`; }
         seg = [];
       };
-      data.forEach((d, i) => { const v = d[s.key]; if (v == null) flush(); else { seg.push(`${X(i)},${Y(v)}`); lastI = i; lastV = v; } });
+      data.forEach((d, i) => { const v = d[s.key]; if (v == null) flush(); else { seg.push(`${X(i)},${Yc(v)}`); lastI = i; lastV = v; } });
       flush();
       if (lastI >= 0) {
-        g += `<circle class="enddot" cx="${X(lastI)}" cy="${Y(lastV)}" r="3.5" fill="${s.color}"/>`;
-        g += `<text class="axis" x="${m.l + iw + 6}" y="${Y(lastV) + 3}" text-anchor="start" fill="${s.color}" style="font-weight:700">${fmtY(lastV)}</text>`;
+        g += `<circle class="enddot" cx="${X(lastI)}" cy="${Yc(lastV)}" r="3.5" fill="${s.color}"/>`;
+        g += `<text class="axis" x="${m.l + iw + 6}" y="${Yc(lastV) + 3}" text-anchor="start" fill="${s.color}" style="font-weight:700">${fmtY(lastV)}</text>`;
       }
     });
     g += `<line class="cross" x1="0" y1="${m.t}" x2="0" y2="${m.t + ih}" stroke-dasharray="3 3" opacity="0"/>`;
     g += `<rect class="ov" x="${m.l}" y="${m.t}" width="${iw}" height="${ih}" fill="transparent"/>`;
-    // Tamaño explícito en px (no 100%): así el contenedor puede hacer scroll.
-    el.innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" style="display:block;width:${W}px;height:${H}px" role="img">${g}</svg>`;
+    el.innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img">${g}</svg>`;
 
     const svg = el.querySelector('svg'), cross = el.querySelector('.cross'), ov = el.querySelector('.ov');
     ov.addEventListener('mousemove', ev => {

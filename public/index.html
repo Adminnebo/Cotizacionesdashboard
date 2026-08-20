@@ -99,12 +99,12 @@
             <span class="camila__trendtitle">% de éxito vs fallo en el tiempo</span>
             <div class="camila__trendctrls">
               <label class="camila__check camila__trendtest" id="camilaTrendTestWrap" hidden><input type="checkbox" id="camilaTrendTest" /> Incluir test</label>
-              <label class="camila__amp">Amplitud
-                <select id="camilaTrendAmp">
-                  <option value="auto" selected>Auto (mín–máx)</option>
-                  <option value="full">0–100%</option>
-                </select>
-              </label>
+              <span class="camila__amp">Eje %
+                <input type="number" id="camilaTrendMin" class="camila__ampin" min="0" max="100" step="1" placeholder="auto" title="% mínimo del eje (vacío = automático)" />
+                <span class="camila__ampsep">–</span>
+                <input type="number" id="camilaTrendMax" class="camila__ampin" min="0" max="100" step="1" placeholder="auto" title="% máximo del eje (vacío = automático)" />
+                <button type="button" id="camilaTrendAuto" class="camila__ampauto" title="Volver a automático">auto</button>
+              </span>
               <div class="camila__legend" id="camilaTrendLegend"></div>
             </div>
           </div>

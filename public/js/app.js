@@ -348,7 +348,7 @@
   const CAM_DAY = 86400000;
   let camInited = false, camDrag = null, camDetail = false;   // camDetail: vista detallada (solo super admin)
   let camAgentFilter = 'all', camExcludeTest = true;          // filtros del detallado
-  let camTrendTest = false, camTrendAmp = 'auto';             // gráfica: incluir test / amplitud del eje
+  let camTrendTest = false, camTrendMin = null, camTrendMax = null;   // gráfica: incluir test / límites % del eje (null = auto)
   let camCalMonth = 0, camWeekAnchor = null;                  // calendario de semanas
   let camDomA = 0, camDomB = 0, camFrom = 0, camTo = 0;   // dominio y selección (ms)
 
@@ -584,7 +584,10 @@
     ];
     box.hidden = false;
     if (leg) leg.innerHTML = series.map(s => `<span class="camila__legitem"><i style="background:${s.color}"></i>${escapeHtml(s.label)}</span>`).join('');
-    Charts.trendChart(el, { data, series, yMode: camTrendAmp, unit: '%', xLabel: x => dayLabel(x.d), height: 300 });
+    // Límites del eje: los que el usuario fijó (si son válidos y min < max) o auto.
+    const yMin = (camTrendMin != null && camTrendMax != null && camTrendMin < camTrendMax) ? camTrendMin : null;
+    const yMax = (yMin != null) ? camTrendMax : null;
+    Charts.trendChart(el, { data, series, yMin, yMax, unit: '%', xLabel: x => dayLabel(x.d), height: 250 });
   }
 
   async function loadCamila() {
@@ -729,7 +732,10 @@
     $('#camilaExclTest').addEventListener('change', e => { camExcludeTest = e.target.checked; renderCamila(); });
     // Controles de la gráfica en el tiempo (no recargan datos, solo re-dibujan).
     $('#camilaTrendTest').addEventListener('change', e => { camTrendTest = e.target.checked; if (camilaData) renderCamilaTrend(camilaData); });
-    $('#camilaTrendAmp').addEventListener('change', e => { camTrendAmp = e.target.value; if (camilaData) renderCamilaTrend(camilaData); });
+    const parsePct = v => { const n = Number(v); return (v !== '' && Number.isFinite(n)) ? Math.max(0, Math.min(100, n)) : null; };
+    $('#camilaTrendMin').addEventListener('input', e => { camTrendMin = parsePct(e.target.value); if (camilaData) renderCamilaTrend(camilaData); });
+    $('#camilaTrendMax').addEventListener('input', e => { camTrendMax = parsePct(e.target.value); if (camilaData) renderCamilaTrend(camilaData); });
+    $('#camilaTrendAuto').addEventListener('click', () => { camTrendMin = camTrendMax = null; $('#camilaTrendMin').value = ''; $('#camilaTrendMax').value = ''; if (camilaData) renderCamilaTrend(camilaData); });
     // Calendario de semanas completas.
     $('#camilaCalBtn').addEventListener('click', e => { e.stopPropagation(); camToggleCal(); });
     $('#camilaCal').addEventListener('click', e => {
