@@ -410,6 +410,11 @@ table.msgs { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 .camila__amp { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-muted); }
 .camila__amp select { font: inherit; font-size: 12px; padding: 3px 6px; border-radius: 7px; border: 1px solid var(--border); background: var(--surface-1); color: var(--text); cursor: pointer; }
 .camila__legend { display: flex; gap: 14px; }
+/* Contenedor con scroll (H y V) para inspeccionar puntos concretos cuando hay muchos días */
+#camilaChart { overflow: auto; max-height: 250px; border: 1px solid var(--border-soft); border-radius: 8px; }
+#camilaChart svg { width: auto; }   /* respeta el ancho natural (px) para el scroll horizontal */
+#camilaChart::-webkit-scrollbar { height: 9px; width: 9px; }
+#camilaChart::-webkit-scrollbar-thumb { background: var(--border); border-radius: 999px; }
 .camila__legitem { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-muted); }
 .camila__legitem i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
 .camila__row { display: grid; grid-template-columns: minmax(180px, 1.4fr) minmax(90px, 2fr) minmax(150px, auto); align-items: center; gap: 14px; }

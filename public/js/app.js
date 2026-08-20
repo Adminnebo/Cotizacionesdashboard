@@ -584,7 +584,7 @@
     ];
     box.hidden = false;
     if (leg) leg.innerHTML = series.map(s => `<span class="camila__legitem"><i style="background:${s.color}"></i>${escapeHtml(s.label)}</span>`).join('');
-    Charts.trendChart(el, { data, series, yMode: camTrendAmp, unit: '%', xLabel: x => dayLabel(x.d), height: 230 });
+    Charts.trendChart(el, { data, series, yMode: camTrendAmp, unit: '%', xLabel: x => dayLabel(x.d), height: 300 });
   }
 
   async function loadCamila() {
