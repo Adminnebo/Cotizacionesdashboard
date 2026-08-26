@@ -796,6 +796,12 @@
     (async () => {
       if (window.Auth) { const s = await Auth.requireSession(); if (!s) return; } // exige sesión
       await setupAuth();
+      // Sistema de tickets (mismo del inbox): botón flotante 🎫 + modal.
+      if (window.TicketsWidget) TicketsWidget.init({
+        apiBase: 'https://whatsapp.neboaiconsulting.com',
+        getToken: () => (window.Auth && Auth.currentToken) || null,
+        app: 'cotizaciones'
+      });
       load(); loadMessages();
       if (window.Quotes) Quotes.refreshIfVisible();
       if (window.Calls) Calls.refreshIfVisible();
