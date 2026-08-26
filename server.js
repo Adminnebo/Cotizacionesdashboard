@@ -123,6 +123,7 @@ const ABIERTAS = [/^\/hooks\//, /^\/calls\/hook$/, /^\/health$/];
 const PERM_RUTAS = [
   { m: 'GET',   re: /^\/stats$/,                    perm: 'cotizaciones.resumen' },
   { m: 'GET',   re: /^\/camila-eficiencia$/,        perm: 'cotizaciones.resumen' },
+  { m: 'GET',   re: /^\/mensajes-bot-humano$/,      perm: 'cotizaciones.resumen' },
   { m: 'GET',   re: /^\/quotes\/gaps$/,             perm: 'cotizaciones.resumen' },
   { m: 'GET',   re: /^\/messages$/,                 perm: 'cotizaciones.mensajes' },
   { m: 'GET',   re: /^\/logs$/,                     perm: 'cotizaciones.registros' },
@@ -287,6 +288,24 @@ app.get('/api/stats', optionalAuth, wrap(async (req, res) => {
     byType: byType.rows.map(x => ({ type: x.type, n: x.n })),
     quotes
   });
+}));
+
+// Mensajes salientes por día: cuántos mandó Camila (sent_by='camila') y cuántos
+// un humano (sent_by no nulo y distinto de camila). Serie para la gráfica en el
+// tiempo + totales. Mismo rango (?from&to | ?days) que el resto del panel.
+app.get('/api/mensajes-bot-humano', optionalAuth, wrap(async (req, res) => {
+  const { from, to } = rangeOf(req);
+  const rows = (await q(
+    `SELECT to_char(date_trunc('day', created_at AT TIME ZONE $3), 'YYYY-MM-DD') AS d,
+            count(*) FILTER (WHERE lower(sent_by) = 'camila')                              AS bot,
+            count(*) FILTER (WHERE sent_by IS NOT NULL AND lower(sent_by) <> 'camila')     AS human,
+            count(*) FILTER (WHERE sent_by IS NULL)                                        AS sin_dato
+     FROM messages
+     WHERE created_at >= $1 AND created_at < $2 AND direction = 'out'
+     GROUP BY 1 ORDER BY 1`, [from, to, TZ])).rows;
+  const series = rows.map(r => ({ d: r.d, bot: Number(r.bot) || 0, human: Number(r.human) || 0, sinDato: Number(r.sin_dato) || 0 }));
+  const totals = series.reduce((a, x) => ({ bot: a.bot + x.bot, human: a.human + x.human, sinDato: a.sinDato + x.sinDato }), { bot: 0, human: 0, sinDato: 0 });
+  res.json({ available: true, range: { from, to }, series, totals });
 }));
 
 // Mensajes emparejados: cada mensaje entrante junto a su respuesta saliente,

@@ -597,6 +597,45 @@
     } catch (e) { camilaData = { available: false, error: e.message }; }
     if (!camInited && camilaData && camilaData.available !== false) camInitSlider(camilaData);
     renderCamila();
+    loadMensajesAgente();                 // comparte el mismo rango que la eficiencia
+  }
+
+  // Mensajes salientes: Camila (bot) vs humanos, en el tiempo. Usa el MISMO rango
+  // que la tarjeta de eficiencia (la barra de fechas de arriba).
+  let msgAgData = null;
+  async function loadMensajesAgente() {
+    try {
+      const res = await fetch('/api/mensajes-bot-humano?' + camRangeParams().toString(), { headers: authHeaders() });
+      msgAgData = await res.json();
+    } catch (e) { msgAgData = { available: false, error: e.message }; }
+    renderMensajesAgente();
+  }
+  function renderMensajesAgente() {
+    const d = msgAgData, body = $('#camilaMsgBody'), trend = $('#camilaMsgTrend'), note = $('#camilaMsgNote'), leg = $('#camilaMsgLegend');
+    if (!body) return;
+    if (!d || d.available === false) {
+      body.innerHTML = `<p class="card__note">Métrica de mensajes no disponible${d && d.error ? ': ' + escapeHtml(d.error) : ''}.</p>`;
+      if (trend) trend.hidden = true; if (note) note.textContent = ''; return;
+    }
+    const T = d.totals || { bot: 0, human: 0, sinDato: 0 };
+    const tot = T.bot + T.human;
+    const pct = tot ? Math.round(T.bot / tot * 100) : null;
+    body.innerHTML = `<div class="camila__msgsec-h">Mensajes: Camila vs humanos</div>
+      <div class="camila__hero">
+        <div class="camila__big">${pct == null ? '—' : pct + '%'}<span class="camila__biglbl">mensajes de Camila</span></div>
+        <div class="camila__tiles">
+          <div class="camila__tile"><span class="camila__tnum">${fmtNum(T.bot)}</span><span class="camila__tlbl">Camila (bot)</span></div>
+          <div class="camila__tile"><span class="camila__tnum">${fmtNum(T.human)}</span><span class="camila__tlbl">humanos</span></div>
+          ${T.sinDato ? `<div class="camila__tile"><span class="camila__tnum camila__tnum--ext">${fmtNum(T.sinDato)}</span><span class="camila__tlbl">sin autor (antiguos)</span></div>` : ''}
+        </div>
+      </div>`;
+    const data = (d.series || []).map(x => ({ d: x.d, bot: x.bot, human: x.human }));
+    if (!data.length || tot === 0) { if (trend) trend.hidden = true; if (note) note.textContent = 'Sin mensajes salientes en el rango.'; return; }
+    const series = [{ key: 'bot', label: 'Camila', color: '#3b82f6' }, { key: 'human', label: 'Humanos', color: '#e2497a' }];
+    if (trend) trend.hidden = false;
+    if (leg) leg.innerHTML = series.map(s => `<span class="camila__legitem"><i style="background:${s.color}"></i>${s.label}</span>`).join('');
+    Charts.trendChart($('#camilaMsgChart'), { data, series, xLabel: x => dayLabel(x.d), height: 230 });
+    if (note) note.textContent = 'Mensajes salientes por día según quién los envió (campo sent_by).' + (T.sinDato ? ' "Sin autor" = mensajes antiguos previos al registro del autor.' : '');
   }
 
   async function load() {
