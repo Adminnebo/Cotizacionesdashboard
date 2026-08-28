@@ -535,7 +535,7 @@
     }
 
     const cls = effClass(heroB.eff);
-    const heroLbl = (detailed && !camExcludeTest) ? 'eficiencia · prod + test' : 'eficiencia · producción';
+    const heroLbl = (detailed && !camExcludeTest) ? 'precisión · prod + test' : 'precisión · producción';
     // El dato de test es SOLO para super admin (usuario y admin no lo ven).
     const showTest = d.canDetail && testB && testB.total > 0 && (camExcludeTest || !detailed);
     const hero = `<div class="camila__hero">
@@ -551,7 +551,7 @@
     renderCamilaTrend(d);
     if (upd) upd.textContent = d.updatedAt ? ('actualizado ' + relTime(d.updatedAt)) : (d.syncing ? 'sincronizando…' : '');
     if (note) note.textContent = (d.warning ? '⚠️ ' + d.warning + '. ' : '') +
-      'Eficiencia = ejecuciones exitosas ÷ terminadas (en n8n), sobre los flujos de procesamiento de Camila (WhatsApp + IG/FB/WEB). No incluye el trigger de WhatsApp (eventos de Meta) ni ejecuciones en curso. Los fallos por servicios externos (Sword AI / inbox) no cuentan como error.' +
+      'Precisión = ejecuciones exitosas ÷ terminadas (en n8n), sobre los flujos de procesamiento de Camila (WhatsApp + IG/FB/WEB). No incluye el trigger de WhatsApp (eventos de Meta) ni ejecuciones en curso. Los fallos por servicios externos (Sword AI / inbox) no cuentan como error.' +
       (heroB.ext ? ` ${fmtNum(heroB.ext)} excluida(s) por error externo en el rango.` : '') +
       (detailed ? (camExcludeTest ? ' Excluyendo ejecuciones de test.' : ' Incluyendo test en el total.') : ' Vista general por bot.');
   }
