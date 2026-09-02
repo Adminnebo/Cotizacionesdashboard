@@ -76,9 +76,14 @@ body { font-family: Inter, system-ui, sans-serif; background: var(--surface-0); 
 .kpis--7 .kpi { grid-column: span 3; }
 .kpis--7 .kpi:nth-last-child(-n+4) { grid-column: span 3; }
 .kpis--7 .kpi:nth-last-child(-n+3) { grid-column: span 4; }
+/* Vista resumida: 5 tarjetas en una sola fila */
+.kpis--5 { grid-template-columns: repeat(5, 1fr); }
+.kpis--5 .kpi, .kpis--5 .kpi:nth-last-child(-n+4) { grid-column: auto; }
+/* Toggle Detallado / Resumido, alineado a la derecha sobre los KPIs */
+.kpiview { display: flex; justify-content: flex-end; margin-bottom: 14px; }
 @media (max-width: 1100px) {
-  .kpis, .kpis--7 { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
-  .kpi, .kpi:nth-last-child(-n+4), .kpis--7 .kpi, .kpis--7 .kpi:nth-last-child(-n+3) { grid-column: auto; }
+  .kpis, .kpis--7, .kpis--5 { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
+  .kpi, .kpi:nth-last-child(-n+4), .kpis--7 .kpi, .kpis--7 .kpi:nth-last-child(-n+3), .kpis--5 .kpi { grid-column: auto; }
 }
 /* ocultar la columna "Coste IA" (9ª) cuando no eres super_admin */
 .msgs--nocost th:nth-child(9), .msgs--nocost td:nth-child(9) { display: none; }

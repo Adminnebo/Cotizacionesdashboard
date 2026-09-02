@@ -5,6 +5,7 @@
   const colors = () => ({ received: cssvar('--received'), sent: cssvar('--sent') });
   let current = null, days = 30;
   let customFrom = null, customTo = null;
+  let kpiView = (() => { try { return localStorage.getItem('kpiView') || 'detallado'; } catch (_) { return 'detallado'; } })();
   let msgPage = 1, msgData = null, msgSearch = '', msgSender = 'all', msgChannel = '';
   let logsPage = 1, logsData = null;
   let camilaData = null;
@@ -141,26 +142,44 @@
     const ai = s.aiCost || {};
     const bl = s.billing || {};
     const q = s.quotes || {};
-    const kpis = [
-      kpi('Enviados', col.sent, fmtNum(s.kpi.sent), 'mensajes salientes'),
-      kpi('Recibidos', col.received, fmtNum(s.kpi.received), 'mensajes entrantes'),
-      kpi('Tiempo de respuesta', '', fmtSecs(rt.medianSecs), `mediana · prom ${fmtSecs(rt.avgSecs)} · p90 ${fmtSecs(rt.p90Secs)}`)
-    ];
-    if (canCost) {   // costes reales solo super_admin; si no, se ocultan (no aparecen)
-      kpis.push(
-        kpi('Coste prom/mensaje', '', ai.runs ? fmtUsd(ai.totalUsd / ai.runs) : '—', ai.runs ? `promedio IA sobre ${fmtNum(ai.runs)} runs` : 'sin datos aún', !ai.runs),
-        kpi('Consumo IA', '', ai.runs ? fmtUsd(ai.totalUsd) : '—', ai.runs ? `${fmtNum(ai.runs)} runs · ${(ai.byModel || []).map(m => `${m.model}: ${fmtUsd(m.usd)}`).join(' · ')}` : 'sin datos aún', !ai.runs)
-      );
-    }
-    kpis.push(
-      kpi('Cobrado al cliente', '', bl.total != null ? fmtUsd(bl.total, 2) : '—', `${fmtNum(s.kpi.sent)} msg × ${fmtUsd(bl.perOut || 0, 2)}`),
-      kpi('Último enviado', '', fmtDateTime(s.kpi.lastSentAt), relTime(s.kpi.lastSentAt), false, 'kpi--sm'),
-      kpi('Conversaciones', '', fmtNum(s.kpi.activeConversations), 'con actividad en el rango'),
-      kpi('Cotizaciones', '', q.available ? fmtNum(q.count) : 'Pendiente', q.available ? (q.amount ? 'RD$ ' + fmtNum(Math.round(q.amount)) + ' cotizado' : 'enviadas en el rango') : 'configurar MSSQL', !q.available)
-    );
+    // Refleja el toggle Detallado / Resumido en la barra.
+    $('#kpiViewSeg') && $('#kpiViewSeg').querySelectorAll('.seg').forEach(b => b.classList.toggle('seg--active', b.dataset.kpiview === kpiView));
+
     const kpisEl = $('#kpis');
-    kpisEl.innerHTML = kpis.join('');
-    kpisEl.className = 'kpis' + (canCost ? '' : ' kpis--7');   // 9 KPIs (5/4) vs 7 (4/3)
+    if (kpiView === 'resumido') {
+      // Vista compacta: mensajes (enviados+recibidos juntos), conversaciones,
+      // cotizaciones, tiempo de respuesta y último enviado.
+      const total = (Number(s.kpi.sent) || 0) + (Number(s.kpi.received) || 0);
+      const kpis = [
+        kpi('Mensajes', '', fmtNum(total), `${fmtNum(s.kpi.sent)} enviados · ${fmtNum(s.kpi.received)} recibidos`),
+        kpi('Conversaciones', '', fmtNum(s.kpi.activeConversations), 'con actividad en el rango'),
+        kpi('Cotizaciones', '', q.available ? fmtNum(q.count) : 'Pendiente', q.available ? (q.amount ? 'RD$ ' + fmtNum(Math.round(q.amount)) + ' cotizado' : 'enviadas en el rango') : 'configurar MSSQL', !q.available),
+        kpi('Tiempo de respuesta', '', fmtSecs(rt.medianSecs), `mediana · prom ${fmtSecs(rt.avgSecs)} · p90 ${fmtSecs(rt.p90Secs)}`),
+        kpi('Último enviado', '', fmtDateTime(s.kpi.lastSentAt), relTime(s.kpi.lastSentAt), false, 'kpi--sm')
+      ];
+      kpisEl.innerHTML = kpis.join('');
+      kpisEl.className = 'kpis kpis--5';
+    } else {
+      const kpis = [
+        kpi('Enviados', col.sent, fmtNum(s.kpi.sent), 'mensajes salientes'),
+        kpi('Recibidos', col.received, fmtNum(s.kpi.received), 'mensajes entrantes'),
+        kpi('Tiempo de respuesta', '', fmtSecs(rt.medianSecs), `mediana · prom ${fmtSecs(rt.avgSecs)} · p90 ${fmtSecs(rt.p90Secs)}`)
+      ];
+      if (canCost) {   // costes reales solo super_admin; si no, se ocultan (no aparecen)
+        kpis.push(
+          kpi('Coste prom/mensaje', '', ai.runs ? fmtUsd(ai.totalUsd / ai.runs) : '—', ai.runs ? `promedio IA sobre ${fmtNum(ai.runs)} runs` : 'sin datos aún', !ai.runs),
+          kpi('Consumo IA', '', ai.runs ? fmtUsd(ai.totalUsd) : '—', ai.runs ? `${fmtNum(ai.runs)} runs · ${(ai.byModel || []).map(m => `${m.model}: ${fmtUsd(m.usd)}`).join(' · ')}` : 'sin datos aún', !ai.runs)
+        );
+      }
+      kpis.push(
+        kpi('Cobrado al cliente', '', bl.total != null ? fmtUsd(bl.total, 2) : '—', `${fmtNum(s.kpi.sent)} msg × ${fmtUsd(bl.perOut || 0, 2)}`),
+        kpi('Último enviado', '', fmtDateTime(s.kpi.lastSentAt), relTime(s.kpi.lastSentAt), false, 'kpi--sm'),
+        kpi('Conversaciones', '', fmtNum(s.kpi.activeConversations), 'con actividad en el rango'),
+        kpi('Cotizaciones', '', q.available ? fmtNum(q.count) : 'Pendiente', q.available ? (q.amount ? 'RD$ ' + fmtNum(Math.round(q.amount)) + ' cotizado' : 'enviadas en el rango') : 'configurar MSSQL', !q.available)
+      );
+      kpisEl.innerHTML = kpis.join('');
+      kpisEl.className = 'kpis' + (canCost ? '' : ' kpis--7');   // 9 KPIs (5/4) vs 7 (4/3)
+    }
 
     // Legends
     const leg = `<span><i style="background:${col.received}"></i>Recibidos</span><span><i style="background:${col.sent}"></i>Enviados</span>`;
@@ -737,6 +756,13 @@
     $('#chanSel').addEventListener('change', e => {
       msgChannel = e.target.value; msgPage = 1;
       loadMessages();
+    });
+    // Toggle Detallado / Resumido de los KPIs (no recarga datos, solo re-pinta).
+    $('#kpiViewSeg') && $('#kpiViewSeg').addEventListener('click', e => {
+      const b = e.target.closest('.seg'); if (!b) return;
+      kpiView = b.dataset.kpiview;
+      try { localStorage.setItem('kpiView', kpiView); } catch (_) {}
+      if (current) render();
     });
     $('#btnRefresh').addEventListener('click', () => { load(); loadMessages(); });
     // Barra de fechas propia de la tarjeta de Camila (arrastre de extremos y del rango).

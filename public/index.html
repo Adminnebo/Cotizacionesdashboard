@@ -53,6 +53,12 @@
   <main class="wrap" id="main">
     <!-- Pestaña: Resumen (KPIs + gráficas) -->
     <div class="tabpanel" id="tabResumen">
+      <div class="kpiview">
+        <div class="segmented" id="kpiViewSeg" role="tablist" aria-label="Vista de KPIs">
+          <button class="seg seg--active" data-kpiview="detallado">Detallado</button>
+          <button class="seg" data-kpiview="resumido">Resumido</button>
+        </div>
+      </div>
       <section class="kpis" id="kpis"></section>
 
       <section class="card card--wide camila" id="camilaCard">
