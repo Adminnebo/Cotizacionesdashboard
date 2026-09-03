@@ -672,6 +672,7 @@
 
   // Gráfica del tiempo de run (IA) por día: promedio + mediana, en segundos.
   let execRows = [], execSelDay = '';
+  let execFromH = 0, execToH = 23, execDayData = null;
   function renderExecByDay(rows) {
     const el = $('#chartExec'), leg = $('#legendExec'), note = $('#execNote'), sel = $('#execDaySel');
     if (!el) return;
@@ -713,16 +714,37 @@
     Charts.trendChart(el, { data: execRows, series, unit: 's', xLabel: x => dayLabel(x.d), height: 250, markIndex,
       onClick: i => { const d = execRows[i]; if (d && d.avg != null) { execSelDay = d.d; const sel = $('#execDaySel'); if (sel) sel.value = d.d; drawExecChart(); renderExecDayDetail(); } } });
   }
-  function renderExecDayDetail() {
+  // Detalle del día seleccionado: trae el desglose por hora + stats de la franja.
+  async function renderExecDayDetail() {
     const box = $('#execDayDetail'); if (!box) return;
-    const d = execSelDay ? execRows.find(x => x.d === execSelDay) : null;
-    if (!d || d.avg == null) { box.hidden = true; box.innerHTML = ''; return; }
+    if (!execSelDay) { box.hidden = true; box.innerHTML = ''; execDayData = null; return; }
     box.hidden = false;
+    if (!execDayData || execDayData.day !== execSelDay) box.innerHTML = '<p class="card__note">Cargando el día…</p>';
+    let d;
+    try {
+      const res = await fetch(`/api/exec-day?day=${encodeURIComponent(execSelDay)}&fromH=${execFromH}&toH=${execToH}`, { headers: authHeaders() });
+      d = await res.json();
+      if (!res.ok || !d || d.available === false) throw new Error((d && d.error) || 'Error ' + res.status);
+    } catch (e) { box.innerHTML = `<p class="card__note">No se pudo cargar el día: ${escapeHtml(e.message)}</p>`; return; }
+    if (execSelDay !== d.day) return;   // cambió mientras cargaba
+    execDayData = d;
+    const b = d.band || {};
+    const hsel = (which, val) => `<select class="exec__hsel" data-hsel="${which}">${Array.from({ length: 24 }, (_, h) => `<option value="${h}"${h === val ? ' selected' : ''}>${String(h).padStart(2, '0')}:00</option>`).join('')}</select>`;
     const item = (lbl, v) => `<div class="exec__d"><span class="exec__dv">${v == null ? '—' : fmtExec(v)}</span><span class="exec__dl">${lbl}</span></div>`;
-    box.innerHTML = `<div class="exec__dtitle">📅 ${dayLabel(d.d)} · <b>${fmtNum(d.n)}</b> runs</div>
-      <div class="exec__drow">
-        ${item('Promedio', d.avg)}${item('Mediana', d.med)}${item('p90', d.p90)}${item('Más rápido', d.min)}${item('Más lento', d.max)}
-      </div>`;
+    const completa = d.fromH === 0 && d.toH === 23;
+    box.innerHTML = `
+      <div class="exec__dtitle">📅 ${dayLabel(d.day)} · <b>${fmtNum(b.n)}</b> runs${completa ? '' : ` · franja ${String(d.fromH).padStart(2, '0')}:00–${String(d.toH).padStart(2, '0')}:59`}</div>
+      <div class="exec__franja">🕐 Franja: de ${hsel('from', d.fromH)} a ${hsel('to', d.toH)}:59 ${completa ? '' : '<button class="exec__reset" data-hreset>ver 24h</button>'}</div>
+      <div class="exec__drow">${item('Promedio', b.avgS)}${item('Mediana', b.medS)}${item('p90', b.p90S)}${item('Más rápido', b.minS)}${item('Más lento', b.maxS)}</div>
+      <div id="execHourChart" class="chart"></div>`;
+    drawExecHourChart();
+  }
+  // Mini-gráfica del día por HORA (0–23), con la franja resaltada.
+  function drawExecHourChart() {
+    const el = $('#execHourChart'); if (!el || !execDayData) return;
+    const data = (execDayData.hours || []).map(x => ({ d: String(x.h).padStart(2, '0'), h: x.h, avg: x.avgS != null ? Math.round(x.avgS * 10) / 10 : null, med: x.medS != null ? Math.round(x.medS * 10) / 10 : null, n: x.n }));
+    const series = [{ key: 'avg', label: 'Promedio', color: '#3b82f6' }, { key: 'med', label: 'Mediana', color: '#f59e0b' }];
+    Charts.trendChart(el, { data, series, unit: 's', xLabel: x => x.d + 'h', height: 210, band: { from: execDayData.fromH, to: execDayData.toH } });
   }
 
   function applyTheme(t) { document.documentElement.setAttribute('data-theme', t); document.body.setAttribute('data-theme', t); try { localStorage.setItem('an_theme', t); } catch (_) {} }
@@ -824,6 +846,17 @@
     });
     // Selector de día de la gráfica de tiempo de run.
     $('#execDaySel') && $('#execDaySel').addEventListener('change', e => { execSelDay = e.target.value; drawExecChart(); renderExecDayDetail(); });
+    // Franja horaria dentro del detalle del día (delegación: el HTML se re-pinta).
+    $('#execDayDetail') && $('#execDayDetail').addEventListener('change', e => {
+      const hs = e.target.closest('[data-hsel]'); if (!hs) return;
+      const v = parseInt(e.target.value, 10);
+      if (hs.dataset.hsel === 'from') execFromH = v; else execToH = v;
+      if (execFromH > execToH) { const t = execFromH; execFromH = execToH; execToH = t; }
+      renderExecDayDetail();
+    });
+    $('#execDayDetail') && $('#execDayDetail').addEventListener('click', e => {
+      if (e.target.closest('[data-hreset]')) { execFromH = 0; execToH = 23; renderExecDayDetail(); }
+    });
     $('#btnRefresh').addEventListener('click', () => { load(); loadMessages(); });
     // Barra de fechas propia de la tarjeta de Camila (arrastre de extremos y del rango).
     $('#camilaH0').addEventListener('pointerdown', e => camStart('start', e));

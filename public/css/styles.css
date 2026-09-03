@@ -91,6 +91,10 @@ body { font-family: Inter, system-ui, sans-serif; background: var(--surface-0); 
 .exec__d { display: flex; flex-direction: column; gap: 2px; }
 .exec__dv { font-size: 20px; font-weight: 700; color: var(--text); }
 .exec__dl { font-size: 11.5px; color: var(--text-muted); text-transform: uppercase; letter-spacing: .03em; }
+.exec__franja { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 12.5px; color: var(--text-muted); margin: 2px 0 12px; }
+.exec__hsel { font: inherit; font-size: 12.5px; padding: 4px 6px; border-radius: 7px; border: 1px solid var(--border); background: var(--surface-1); color: var(--text); cursor: pointer; }
+.exec__reset { font: inherit; font-size: 11.5px; padding: 4px 10px; border-radius: 7px; border: 1px solid var(--border); background: var(--surface-1); color: var(--text); cursor: pointer; margin-left: 4px; }
+.exec__reset:hover { border-color: var(--brand, #2f6df6); color: var(--brand, #2f6df6); }
 @media (max-width: 1100px) {
   .kpis, .kpis--7, .kpis--5 { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
   .kpi, .kpi:nth-last-child(-n+4), .kpis--7 .kpi, .kpis--7 .kpi:nth-last-child(-n+3), .kpis--5 .kpi { grid-column: auto; }

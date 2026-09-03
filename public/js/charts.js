@@ -145,6 +145,12 @@
     const fmtY = v => (ax.step >= 1 ? String(Math.round(v)) : String(v)) + unit;
 
     let g = '';
+    // Banda/franja resaltada (opcional): rectángulo translúcido detrás de todo.
+    if (cfg.band && cfg.band.from != null && cfg.band.to != null && n > 1) {
+      const bx1 = X(Math.max(0, Math.min(n - 1, cfg.band.from)));
+      const bx2 = X(Math.max(0, Math.min(n - 1, cfg.band.to)));
+      g += `<rect x="${Math.min(bx1, bx2)}" y="${m.t}" width="${Math.max(1, Math.abs(bx2 - bx1))}" height="${ih}" fill="#3b82f6" opacity="0.12"/>`;
+    }
     for (let v = ax.lo; v <= ax.hi + 1e-9; v += ax.step) {
       const y = Y(v);
       g += `<line class="gridline" x1="${m.l}" y1="${y}" x2="${m.l + iw}" y2="${y}"/>`;

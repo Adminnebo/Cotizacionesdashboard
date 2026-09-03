@@ -124,6 +124,7 @@ const PERM_RUTAS = [
   { m: 'GET',   re: /^\/stats$/,                    perm: 'cotizaciones.resumen' },
   { m: 'GET',   re: /^\/camila-eficiencia$/,        perm: 'cotizaciones.resumen' },
   { m: 'GET',   re: /^\/mensajes-bot-humano$/,      perm: 'cotizaciones.resumen' },
+  { m: 'GET',   re: /^\/exec-day$/,                 perm: 'cotizaciones.resumen' },
   { m: 'GET',   re: /^\/quotes\/gaps$/,             perm: 'cotizaciones.resumen' },
   { m: 'GET',   re: /^\/messages$/,                 perm: 'cotizaciones.mensajes' },
   { m: 'GET',   re: /^\/logs$/,                     perm: 'cotizaciones.registros' },
@@ -309,6 +310,56 @@ app.get('/api/stats', optionalAuth, wrap(async (req, res) => {
     byType: byType.rows.map(x => ({ type: x.type, n: x.n })),
     quotes
   });
+}));
+
+// Tiempo de run de UN día específico, desglosado por HORA (0–23) en la TZ del
+// panel, + stats de una franja horaria [fromH, toH]. execution_ms ya en segundos.
+app.get('/api/exec-day', optionalAuth, wrap(async (req, res) => {
+  const day = String(req.query.day || '').trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return res.status(400).json({ error: 'día inválido (YYYY-MM-DD)' });
+  const clampH = (v, def) => { const n = parseInt(v, 10); return Number.isFinite(n) ? Math.max(0, Math.min(23, n)) : def; };
+  let fromH = clampH(req.query.fromH, 0), toH = clampH(req.query.toH, 23);
+  if (fromH > toH) { const t = fromH; fromH = toH; toH = t; }
+
+  // Serie por hora (24 buckets) del día local.
+  const hr = (await q(
+    `SELECT EXTRACT(HOUR FROM created_at AT TIME ZONE $2)::int AS h,
+            avg(execution_ms) AS avg_s,
+            percentile_cont(0.5) WITHIN GROUP (ORDER BY execution_ms) AS med_s,
+            min(execution_ms) AS min_s, max(execution_ms) AS max_s, count(*)::int AS n
+     FROM messages
+     WHERE execution_ms IS NOT NULL
+       AND (created_at AT TIME ZONE $2) >= $1::date
+       AND (created_at AT TIME ZONE $2) <  ($1::date + interval '1 day')
+     GROUP BY 1 ORDER BY 1`, [day, TZ])).rows;
+  const byH = new Map(hr.map(r => [Number(r.h), r]));
+  const hours = Array.from({ length: 24 }, (_, h) => {
+    const r = byH.get(h);
+    return { h, avgS: r ? Number(r.avg_s) : null, medS: r ? Number(r.med_s) : null,
+             minS: r ? Number(r.min_s) : null, maxS: r ? Number(r.max_s) : null, n: r ? Number(r.n) : 0 };
+  });
+
+  // Stats exactos de la franja [fromH, toH] (median/p90 no se pueden recombinar
+  // desde las horas, así que se calculan con su propia consulta).
+  const bandRow = (await q(
+    `SELECT avg(execution_ms) AS avg_s,
+            percentile_cont(0.5) WITHIN GROUP (ORDER BY execution_ms) AS med_s,
+            percentile_cont(0.9) WITHIN GROUP (ORDER BY execution_ms) AS p90_s,
+            min(execution_ms) AS min_s, max(execution_ms) AS max_s, count(*)::int AS n
+     FROM messages
+     WHERE execution_ms IS NOT NULL
+       AND (created_at AT TIME ZONE $2) >= $1::date
+       AND (created_at AT TIME ZONE $2) <  ($1::date + interval '1 day')
+       AND EXTRACT(HOUR FROM created_at AT TIME ZONE $2)::int BETWEEN $3 AND $4`, [day, TZ, fromH, toH])).rows[0] || {};
+  const band = {
+    avgS: bandRow.avg_s != null ? Number(bandRow.avg_s) : null,
+    medS: bandRow.med_s != null ? Number(bandRow.med_s) : null,
+    p90S: bandRow.p90_s != null ? Number(bandRow.p90_s) : null,
+    minS: bandRow.min_s != null ? Number(bandRow.min_s) : null,
+    maxS: bandRow.max_s != null ? Number(bandRow.max_s) : null,
+    n: Number(bandRow.n) || 0
+  };
+  res.json({ available: true, day, fromH, toH, hours, band });
 }));
 
 // Mensajes salientes por día: cuántos mandó Camila (sent_by='camila') y cuántos
