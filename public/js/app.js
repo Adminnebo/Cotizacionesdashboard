@@ -192,6 +192,9 @@
     Charts.lineChart($('#chartDay'), { data: s.byDay.length ? s.byDay : [{ day: '—', sent: 0, received: 0 }], series, xLabel: d => dayLabel(d.day), height: 250 });
     Charts.groupedBar($('#chartHour'), { data: s.byHour, series, xLabel: d => d.hour + 'h', tipLabel: d => String(d.hour).padStart(2, '0') + ':00', height: 230 });
 
+    // Tiempo de run (IA) por día: promedio y mediana, en segundos.
+    renderExecByDay(s.execByDay || []);
+
     // hora pico
     const peak = s.byHour.reduce((a, b) => (b.sent + b.received) > (a.sent + a.received) ? b : a, s.byHour[0] || { hour: 0, sent: 0, received: 0 });
     $('#hourNote').textContent = (peak.sent + peak.received) > 0 ? `Pico de actividad: ${String(peak.hour).padStart(2, '0')}:00–${String((peak.hour + 1) % 24).padStart(2, '0')}:00` : 'Sin datos en el rango';
@@ -665,6 +668,24 @@
       loadLogs();
       loadCamila();
     } catch (e) { $('#kpis').innerHTML = `<div class="kpi kpi--muted"><div class="kpi__value">Error</div><div class="kpi__sub">${e.message}</div></div>`; }
+  }
+
+  // Gráfica del tiempo de run (IA) por día: promedio + mediana, en segundos.
+  function renderExecByDay(rows) {
+    const el = $('#chartExec'), leg = $('#legendExec'), note = $('#execNote');
+    if (!el) return;
+    const data = (rows || []).map(x => ({ d: x.day, avg: x.avgS != null ? Math.round(x.avgS * 10) / 10 : null, med: x.medS != null ? Math.round(x.medS * 10) / 10 : null, n: x.n || 0 }));
+    const conDatos = data.filter(x => x.avg != null);
+    if (!conDatos.length) { el.innerHTML = '<p class="card__note">Sin runs con tiempo en el rango.</p>'; if (leg) leg.innerHTML = ''; if (note) note.textContent = ''; return; }
+    const series = [
+      { key: 'avg', label: 'Promedio', color: '#3b82f6' },
+      { key: 'med', label: 'Mediana', color: '#f59e0b' }
+    ];
+    if (leg) leg.innerHTML = series.map(sr => `<span class="camila__legitem"><i style="background:${sr.color}"></i>${sr.label}</span>`).join('');
+    Charts.trendChart(el, { data, series, unit: 's', xLabel: x => dayLabel(x.d), height: 250 });
+    const totN = data.reduce((a, x) => a + (x.n || 0), 0);
+    const gAvg = totN ? data.reduce((a, x) => a + (x.avg || 0) * (x.n || 0), 0) / totN : 0;
+    if (note) note.textContent = `Tiempo que tardó cada run de IA (segundos), promediado por día. ${fmtNum(totN)} runs en el rango · promedio global ${fmtExec(gAvg)}.`;
   }
 
   function applyTheme(t) { document.documentElement.setAttribute('data-theme', t); document.body.setAttribute('data-theme', t); try { localStorage.setItem('an_theme', t); } catch (_) {} }

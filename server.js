@@ -205,7 +205,7 @@ app.get('/api/stats', optionalAuth, wrap(async (req, res) => {
   // coste FINAL por mensaje (billing), que va abierto más abajo.
   const canSeeCost = esSuper(req);
 
-  const [kpi, rt, byDay, byHour, byType, execT, aiRows, quotes] = await Promise.all([
+  const [kpi, rt, byDay, byHour, byType, execT, aiRows, quotes, execByDayRows] = await Promise.all([
     q(`SELECT count(*) FILTER (WHERE direction='out') AS sent,
               count(*) FILTER (WHERE direction='in')  AS received,
               COALESCE(SUM(charged_usd),0) AS charged,
@@ -243,12 +243,25 @@ app.get('/api/stats', optionalAuth, wrap(async (req, res) => {
        FROM messages
        WHERE created_at >= $1 AND created_at < $2 AND (cost_usd IS NOT NULL OR model IS NOT NULL)
        GROUP BY 1 ORDER BY 3 DESC`, [from, to]),
-    quotesStat(from, to)
+    quotesStat(from, to),
+    // Tiempo de run (execution_ms, ya en segundos) promedio y mediano POR DÍA.
+    q(`SELECT to_char(date_trunc('day', created_at AT TIME ZONE $3), 'YYYY-MM-DD') AS day,
+              avg(execution_ms) AS avg_s,
+              percentile_cont(0.5) WITHIN GROUP (ORDER BY execution_ms) AS med_s,
+              count(*)::int AS n
+       FROM messages WHERE created_at >= $1 AND created_at < $2 AND execution_ms IS NOT NULL
+       GROUP BY 1 ORDER BY 1`, [from, to, TZ])
   ]);
 
   const k = kpi.rows[0] || {};
   const r = rt.rows[0] || {};
   const e = execT.rows[0] || {};
+  const execByDay = execByDayRows.rows.map(x => ({
+    day: x.day,
+    avgS: x.avg_s != null ? Number(x.avg_s) : null,
+    medS: x.med_s != null ? Number(x.med_s) : null,
+    n: Number(x.n) || 0
+  }));
   const byModel = aiRows.rows.map(x => ({ model: x.model, runs: Number(x.runs) || 0, usd: Number(x.usd) || 0 }));
   const aiCost = {
     totalUsd: byModel.reduce((a, m) => a + m.usd, 0),
@@ -280,6 +293,7 @@ app.get('/api/stats', optionalAuth, wrap(async (req, res) => {
       p90Secs: e.p90_secs != null ? Number(e.p90_secs) : null,
       samples: Number(e.n) || 0
     },
+    execByDay,
     aiCost: canSeeCost ? aiCost : null,
     canSeeCost,
     billing: { perOut: sentOut ? chargedTotal / sentOut : MSG_COST_OUT, currency: COST_CCY, total: chargedTotal },

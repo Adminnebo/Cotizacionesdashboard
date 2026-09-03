@@ -181,7 +181,7 @@
       i = Math.max(0, Math.min(n - 1, i));
       cross.setAttribute('x1', X(i)); cross.setAttribute('x2', X(i)); cross.setAttribute('opacity', '1');
       const d = data[i];
-      const rows = series.map(s => `<div class="tip__r"><span><i style="background:${s.color}"></i>${esc(s.label)}</span><b>${d[s.key] == null ? '—' : (unit === '%' ? Math.round(d[s.key]) + '%' : d[s.key])}</b></div>`).join('');
+      const rows = series.map(s => { const v = d[s.key]; const shown = v == null ? '—' : (unit === '%' ? Math.round(v) + '%' : (unit ? (Math.round(v * 10) / 10) + unit : v)); return `<div class="tip__r"><span><i style="background:${s.color}"></i>${esc(s.label)}</span><b>${shown}</b></div>`; }).join('');
       showTip(`<div class="tip__t">${esc(cfg.xLabel ? cfg.xLabel(d, i) : d.d)}</div>${rows}`, ev);
     });
     ov.addEventListener('mouseleave', () => { cross.setAttribute('opacity', '0'); hideTip(); });
