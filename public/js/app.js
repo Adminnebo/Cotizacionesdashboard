@@ -671,21 +671,49 @@
   }
 
   // Gráfica del tiempo de run (IA) por día: promedio + mediana, en segundos.
+  let execRows = [], execSelDay = '';
   function renderExecByDay(rows) {
-    const el = $('#chartExec'), leg = $('#legendExec'), note = $('#execNote');
+    const el = $('#chartExec'), leg = $('#legendExec'), note = $('#execNote'), sel = $('#execDaySel');
     if (!el) return;
-    const data = (rows || []).map(x => ({ d: x.day, avg: x.avgS != null ? Math.round(x.avgS * 10) / 10 : null, med: x.medS != null ? Math.round(x.medS * 10) / 10 : null, n: x.n || 0 }));
-    const conDatos = data.filter(x => x.avg != null);
-    if (!conDatos.length) { el.innerHTML = '<p class="card__note">Sin runs con tiempo en el rango.</p>'; if (leg) leg.innerHTML = ''; if (note) note.textContent = ''; return; }
+    execRows = (rows || []).map(x => ({
+      d: x.day,
+      avg: x.avgS != null ? Math.round(x.avgS * 10) / 10 : null,
+      med: x.medS != null ? Math.round(x.medS * 10) / 10 : null,
+      p90: x.p90S != null ? Math.round(x.p90S * 10) / 10 : null,
+      min: x.minS != null ? Math.round(x.minS * 10) / 10 : null,
+      max: x.maxS != null ? Math.round(x.maxS * 10) / 10 : null,
+      n: x.n || 0
+    }));
+    const conDatos = execRows.filter(x => x.avg != null);
+    if (!conDatos.length) { el.innerHTML = '<p class="card__note">Sin runs con tiempo en el rango.</p>'; if (leg) leg.innerHTML = ''; if (note) note.textContent = ''; if (sel) sel.innerHTML = '<option value="">— todos —</option>'; $('#execDayDetail').hidden = true; return; }
     const series = [
       { key: 'avg', label: 'Promedio', color: '#3b82f6' },
       { key: 'med', label: 'Mediana', color: '#f59e0b' }
     ];
     if (leg) leg.innerHTML = series.map(sr => `<span class="camila__legitem"><i style="background:${sr.color}"></i>${sr.label}</span>`).join('');
-    Charts.trendChart(el, { data, series, unit: 's', xLabel: x => dayLabel(x.d), height: 250 });
-    const totN = data.reduce((a, x) => a + (x.n || 0), 0);
-    const gAvg = totN ? data.reduce((a, x) => a + (x.avg || 0) * (x.n || 0), 0) / totN : 0;
-    if (note) note.textContent = `Tiempo que tardó cada run de IA (segundos), promediado por día. ${fmtNum(totN)} runs en el rango · promedio global ${fmtExec(gAvg)}.`;
+    // Poblar el selector de días (solo los que tienen runs).
+    if (sel) {
+      if (execSelDay && !execRows.some(x => x.d === execSelDay)) execSelDay = '';   // el día ya no está en el rango
+      sel.innerHTML = '<option value="">— todos —</option>' + conDatos.map(x => `<option value="${x.d}"${x.d === execSelDay ? ' selected' : ''}>${dayLabel(x.d)}</option>`).join('');
+    }
+    // Al hacer clic en la gráfica se selecciona ese día.
+    Charts.trendChart(el, { data: execRows, series, unit: 's', xLabel: x => dayLabel(x.d), height: 250,
+      onClick: i => { const d = execRows[i]; if (d && d.avg != null) { execSelDay = d.d; if (sel) sel.value = d.d; renderExecDayDetail(); } } });
+    const totN = execRows.reduce((a, x) => a + (x.n || 0), 0);
+    const gAvg = totN ? execRows.reduce((a, x) => a + (x.avg || 0) * (x.n || 0), 0) / totN : 0;
+    if (note) note.textContent = `Tiempo que tardó cada run de IA (segundos), promediado por día. ${fmtNum(totN)} runs en el rango · promedio global ${fmtExec(gAvg)}. Toca un día en la gráfica o elígelo arriba para ver su detalle.`;
+    renderExecDayDetail();
+  }
+  function renderExecDayDetail() {
+    const box = $('#execDayDetail'); if (!box) return;
+    const d = execSelDay ? execRows.find(x => x.d === execSelDay) : null;
+    if (!d || d.avg == null) { box.hidden = true; box.innerHTML = ''; return; }
+    box.hidden = false;
+    const item = (lbl, v) => `<div class="exec__d"><span class="exec__dv">${v == null ? '—' : fmtExec(v)}</span><span class="exec__dl">${lbl}</span></div>`;
+    box.innerHTML = `<div class="exec__dtitle">📅 ${dayLabel(d.d)} · <b>${fmtNum(d.n)}</b> runs</div>
+      <div class="exec__drow">
+        ${item('Promedio', d.avg)}${item('Mediana', d.med)}${item('p90', d.p90)}${item('Más rápido', d.min)}${item('Más lento', d.max)}
+      </div>`;
   }
 
   function applyTheme(t) { document.documentElement.setAttribute('data-theme', t); document.body.setAttribute('data-theme', t); try { localStorage.setItem('an_theme', t); } catch (_) {} }
@@ -785,6 +813,8 @@
       try { localStorage.setItem('kpiView', kpiView); } catch (_) {}
       if (current) render();
     });
+    // Selector de día de la gráfica de tiempo de run.
+    $('#execDaySel') && $('#execDaySel').addEventListener('change', e => { execSelDay = e.target.value; renderExecDayDetail(); });
     $('#btnRefresh').addEventListener('click', () => { load(); loadMessages(); });
     // Barra de fechas propia de la tarjeta de Camila (arrastre de extremos y del rango).
     $('#camilaH0').addEventListener('pointerdown', e => camStart('start', e));

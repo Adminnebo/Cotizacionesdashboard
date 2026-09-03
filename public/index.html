@@ -143,8 +143,14 @@
       <section class="card card--wide">
         <div class="card__head">
           <h2>Tiempo de run por día</h2>
-          <div class="camila__legend" id="legendExec"></div>
+          <div class="exec__head">
+            <label class="exec__daysel">Ver día
+              <select id="execDaySel"><option value="">— todos —</option></select>
+            </label>
+            <div class="camila__legend" id="legendExec"></div>
+          </div>
         </div>
+        <div id="execDayDetail" class="exec__detail" hidden></div>
         <div id="chartExec" class="chart"></div>
         <p class="card__note" id="execNote"></p>
       </section>

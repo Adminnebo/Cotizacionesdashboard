@@ -244,10 +244,14 @@ app.get('/api/stats', optionalAuth, wrap(async (req, res) => {
        WHERE created_at >= $1 AND created_at < $2 AND (cost_usd IS NOT NULL OR model IS NOT NULL)
        GROUP BY 1 ORDER BY 3 DESC`, [from, to]),
     quotesStat(from, to),
-    // Tiempo de run (execution_ms, ya en segundos) promedio y mediano POR DÍA.
+    // Tiempo de run (execution_ms, ya en segundos) por DÍA: promedio, mediana,
+    // p90, mín, máx y nº de runs (para poder inspeccionar un día concreto).
     q(`SELECT to_char(date_trunc('day', created_at AT TIME ZONE $3), 'YYYY-MM-DD') AS day,
               avg(execution_ms) AS avg_s,
               percentile_cont(0.5) WITHIN GROUP (ORDER BY execution_ms) AS med_s,
+              percentile_cont(0.9) WITHIN GROUP (ORDER BY execution_ms) AS p90_s,
+              min(execution_ms) AS min_s,
+              max(execution_ms) AS max_s,
               count(*)::int AS n
        FROM messages WHERE created_at >= $1 AND created_at < $2 AND execution_ms IS NOT NULL
        GROUP BY 1 ORDER BY 1`, [from, to, TZ])
@@ -260,6 +264,9 @@ app.get('/api/stats', optionalAuth, wrap(async (req, res) => {
     day: x.day,
     avgS: x.avg_s != null ? Number(x.avg_s) : null,
     medS: x.med_s != null ? Number(x.med_s) : null,
+    p90S: x.p90_s != null ? Number(x.p90_s) : null,
+    minS: x.min_s != null ? Number(x.min_s) : null,
+    maxS: x.max_s != null ? Number(x.max_s) : null,
     n: Number(x.n) || 0
   }));
   const byModel = aiRows.rows.map(x => ({ model: x.model, runs: Number(x.runs) || 0, usd: Number(x.usd) || 0 }));

@@ -185,6 +185,17 @@
       showTip(`<div class="tip__t">${esc(cfg.xLabel ? cfg.xLabel(d, i) : d.d)}</div>${rows}`, ev);
     });
     ov.addEventListener('mouseleave', () => { cross.setAttribute('opacity', '0'); hideTip(); });
+    // Clic sobre la gráfica: devuelve el índice del punto más cercano (opcional).
+    if (typeof cfg.onClick === 'function') {
+      ov.style.cursor = 'pointer';
+      ov.addEventListener('click', ev => {
+        const r = svg.getBoundingClientRect();
+        const px = (ev.clientX - r.left) / r.width * W;
+        let i = Math.round((px - m.l) / (iw / Math.max(1, n - 1)));
+        i = Math.max(0, Math.min(n - 1, i));
+        cfg.onClick(i, data[i]);
+      });
+    }
   }
 
   global.Charts = { lineChart, groupedBar, trendChart };
