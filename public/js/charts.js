@@ -169,6 +169,12 @@
         g += `<text class="axis" x="${m.l + iw + 6}" y="${Yc(lastV) + 3}" text-anchor="start" fill="${s.color}" style="font-weight:700">${fmtY(lastV)}</text>`;
       }
     });
+    // Día marcado (seleccionado): línea vertical fija + puntos resaltados.
+    const mi = cfg.markIndex;
+    if (mi != null && mi >= 0 && mi < n) {
+      g += `<line x1="${X(mi)}" y1="${m.t}" x2="${X(mi)}" y2="${m.t + ih}" stroke="#6b7280" stroke-width="1.5" stroke-dasharray="5 3" opacity="0.85"/>`;
+      series.forEach(s => { const v = data[mi][s.key]; if (v != null) g += `<circle cx="${X(mi)}" cy="${Yc(v)}" r="5.5" fill="${s.color}" stroke="#fff" stroke-width="2"/>`; });
+    }
     g += `<line class="cross" x1="0" y1="${m.t}" x2="0" y2="${m.t + ih}" stroke-dasharray="3 3" opacity="0"/>`;
     g += `<rect class="ov" x="${m.l}" y="${m.t}" width="${iw}" height="${ih}" fill="transparent"/>`;
     el.innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img">${g}</svg>`;

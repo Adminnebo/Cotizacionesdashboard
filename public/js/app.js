@@ -696,13 +696,22 @@
       if (execSelDay && !execRows.some(x => x.d === execSelDay)) execSelDay = '';   // el día ya no está en el rango
       sel.innerHTML = '<option value="">— todos —</option>' + conDatos.map(x => `<option value="${x.d}"${x.d === execSelDay ? ' selected' : ''}>${dayLabel(x.d)}</option>`).join('');
     }
-    // Al hacer clic en la gráfica se selecciona ese día.
-    Charts.trendChart(el, { data: execRows, series, unit: 's', xLabel: x => dayLabel(x.d), height: 250,
-      onClick: i => { const d = execRows[i]; if (d && d.avg != null) { execSelDay = d.d; if (sel) sel.value = d.d; renderExecDayDetail(); } } });
+    drawExecChart();
     const totN = execRows.reduce((a, x) => a + (x.n || 0), 0);
     const gAvg = totN ? execRows.reduce((a, x) => a + (x.avg || 0) * (x.n || 0), 0) / totN : 0;
     if (note) note.textContent = `Tiempo que tardó cada run de IA (segundos), promediado por día. ${fmtNum(totN)} runs en el rango · promedio global ${fmtExec(gAvg)}. Toca un día en la gráfica o elígelo arriba para ver su detalle.`;
     renderExecDayDetail();
+  }
+  // Dibuja la gráfica de tiempo de run, marcando el día seleccionado si hay uno.
+  function drawExecChart() {
+    const el = $('#chartExec'); if (!el || !execRows.length) return;
+    const series = [
+      { key: 'avg', label: 'Promedio', color: '#3b82f6' },
+      { key: 'med', label: 'Mediana', color: '#f59e0b' }
+    ];
+    const markIndex = execSelDay ? execRows.findIndex(x => x.d === execSelDay) : -1;
+    Charts.trendChart(el, { data: execRows, series, unit: 's', xLabel: x => dayLabel(x.d), height: 250, markIndex,
+      onClick: i => { const d = execRows[i]; if (d && d.avg != null) { execSelDay = d.d; const sel = $('#execDaySel'); if (sel) sel.value = d.d; drawExecChart(); renderExecDayDetail(); } } });
   }
   function renderExecDayDetail() {
     const box = $('#execDayDetail'); if (!box) return;
@@ -814,7 +823,7 @@
       if (current) render();
     });
     // Selector de día de la gráfica de tiempo de run.
-    $('#execDaySel') && $('#execDaySel').addEventListener('change', e => { execSelDay = e.target.value; renderExecDayDetail(); });
+    $('#execDaySel') && $('#execDaySel').addEventListener('change', e => { execSelDay = e.target.value; drawExecChart(); renderExecDayDetail(); });
     $('#btnRefresh').addEventListener('click', () => { load(); loadMessages(); });
     // Barra de fechas propia de la tarjeta de Camila (arrastre de extremos y del rango).
     $('#camilaH0').addEventListener('pointerdown', e => camStart('start', e));
