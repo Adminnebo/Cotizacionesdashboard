@@ -193,7 +193,7 @@
     Charts.groupedBar($('#chartHour'), { data: s.byHour, series, xLabel: d => d.hour + 'h', tipLabel: d => String(d.hour).padStart(2, '0') + ':00', height: 230 });
 
     // Tiempo de run (IA) por día: promedio y mediana, en segundos.
-    renderExecByDay(s.execByDay || []);
+    renderExecByDay(s.execByDay || [], s.execTime || {});
 
     // hora pico
     const peak = s.byHour.reduce((a, b) => (b.sent + b.received) > (a.sent + a.received) ? b : a, s.byHour[0] || { hour: 0, sent: 0, received: 0 });
@@ -673,9 +673,13 @@
   // Gráfica del tiempo de run (IA) por día: promedio + mediana, en segundos.
   let execRows = [], execSelDay = '';
   let execFromH = 0, execToH = 23, execDayData = null;
-  function renderExecByDay(rows) {
-    const el = $('#chartExec'), leg = $('#legendExec'), note = $('#execNote'), sel = $('#execDaySel');
+  function renderExecByDay(rows, stats) {
+    const el = $('#chartExec'), leg = $('#legendExec'), note = $('#execNote'), sel = $('#execDaySel'), head = $('#execHeadline');
     if (!el) return;
+    // Número de cabecera de la gráfica (mediana/prom/p90 del run en el rango).
+    if (head) head.textContent = (stats && stats.medianSecs != null)
+      ? `${fmtExec(stats.medianSecs)} mediana · prom ${fmtExec(stats.avgSecs)} · p90 ${fmtExec(stats.p90Secs)}`
+      : '';
     execRows = (rows || []).map(x => ({
       d: x.day,
       avg: x.avgS != null ? Math.round(x.avgS * 10) / 10 : null,
@@ -700,7 +704,7 @@
     drawExecChart();
     const totN = execRows.reduce((a, x) => a + (x.n || 0), 0);
     const gAvg = totN ? execRows.reduce((a, x) => a + (x.avg || 0) * (x.n || 0), 0) / totN : 0;
-    if (note) note.textContent = `Tiempo que tardó cada run de IA (segundos), promediado por día. ${fmtNum(totN)} runs con tiempo medido · promedio global ${fmtExec(gAvg)}. Nota: puede ser menor que los runs de "Consumo IA" — no todos registran su tiempo de ejecución. Toca un día en la gráfica o elígelo arriba para ver su detalle.`;
+    if (note) note.textContent = `Cuánto tardó el run en generar la respuesta (execution_ms, en segundos), por día. Es DISTINTO de "Tiempo de respuesta" de arriba: eso mide la latencia total (cliente→bot, con cola incluida) y por eso es mayor. ${fmtNum(totN)} runs con tiempo medido · promedio global ${fmtExec(gAvg)}. Toca un día para ver su detalle por hora.`;
     renderExecDayDetail();
   }
   // Dibuja la gráfica de tiempo de run, marcando el día seleccionado si hay uno.
