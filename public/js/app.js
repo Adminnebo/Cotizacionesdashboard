@@ -700,7 +700,7 @@
     drawExecChart();
     const totN = execRows.reduce((a, x) => a + (x.n || 0), 0);
     const gAvg = totN ? execRows.reduce((a, x) => a + (x.avg || 0) * (x.n || 0), 0) / totN : 0;
-    if (note) note.textContent = `Tiempo que tardó cada run de IA (segundos), promediado por día. ${fmtNum(totN)} runs en el rango · promedio global ${fmtExec(gAvg)}. Toca un día en la gráfica o elígelo arriba para ver su detalle.`;
+    if (note) note.textContent = `Tiempo que tardó cada run de IA (segundos), promediado por día. ${fmtNum(totN)} runs con tiempo medido · promedio global ${fmtExec(gAvg)}. Nota: puede ser menor que los runs de "Consumo IA" — no todos registran su tiempo de ejecución. Toca un día en la gráfica o elígelo arriba para ver su detalle.`;
     renderExecDayDetail();
   }
   // Dibuja la gráfica de tiempo de run, marcando el día seleccionado si hay uno.
