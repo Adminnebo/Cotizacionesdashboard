@@ -662,6 +662,15 @@
       loadMessages();
     });
     $('#btnRefresh').addEventListener('click', () => { load(); loadMessages(); });
+    // Acceso directo a Jarvis: el token va en el fragmento de la URL, no en la
+    // query, asi que no llega al servidor de Jarvis dentro de la URL y no queda
+    // en sus logs de acceso ni se filtra por la cabecera Referer.
+    $('#btnJarvis').addEventListener('click', () => {
+      window.open(
+        'https://jarvis-production-71c4.up.railway.app/entrar#t=' + encodeURIComponent(Auth.currentToken),
+        '_blank'
+      );
+    });
     // Barra de fechas propia de la tarjeta de Camila (arrastre de extremos y del rango).
     $('#camilaH0').addEventListener('pointerdown', e => camStart('start', e));
     $('#camilaH1').addEventListener('pointerdown', e => camStart('end', e));
