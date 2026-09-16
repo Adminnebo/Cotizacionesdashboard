@@ -30,6 +30,22 @@ El KPI "Cotizaciones" pasa de *Pendiente* a mostrar el número.
 1. Nuevo servicio desde el repo (detecta el **Dockerfile**).
 2. Variables: `DATABASE_URL`, `TZ_DISPLAY`, y opcional `QUOTES_SQL`.
 
+## Alertas de métricas de Camila
+`metricAlerts.js` revisa cada 15 min y avisa a la app de Alertas (`POST /api/events`,
+sistema `n8n-camila`) una vez por episodio:
+
+| Aviso | Regla |
+|---|---|
+| **P90 de respuesta elevado** | P90 de espera del cliente (respuestas de Camila) en las últimas 2 h ≥ ×2 el de los 7 días anteriores, 3 revisiones seguidas (45 min). |
+| **Uso de Haiku disparado** | % de respuestas con Haiku en la última hora ≥ ×2 el de 7 días y +10 puntos, 2 revisiones seguidas. |
+
+Variables: `ALERTAS_TOKEN` (obligatoria para avisar), `ALERTAS_URL`, `ALERTAS_KEY`,
+`METRIC_ALERTS_MINUTES`. Cada revisión deja una línea `[metric-alerts]` en los logs.
+
+El % de Haiku depende de que n8n guarde el modelo de cada respuesta ("Log Outbound
+with cost WhatsApp" reconoce los nodos por nombre: si se renombra el nodo del
+modelo en el bot, deja de llegar).
+
 ## Notas
 - Solo **lee** la base (no escribe nada).
 - `/api/stats?days=7|30|90|all` devuelve todo el JSON de métricas.

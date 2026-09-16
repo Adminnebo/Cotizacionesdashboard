@@ -200,6 +200,9 @@ app.get('/api/quotes/gaps', optionalAuth, wrap(async (_req, res) => {
   res.json(await quoteGaps.revisar());        // revisión bajo demanda
 }));
 
+// Vigilancia de métricas de Camila (P90 de respuesta, % Haiku) → app de Alertas.
+const metricAlerts = require('./metricAlerts');
+
 app.get('/api/stats', optionalAuth, wrap(async (req, res) => {
   const { from, to } = rangeOf(req);
   // Consumo de IA (coste real por modelo): SOLO super_admin. El cliente ve el
@@ -573,4 +576,5 @@ app.listen(PORT, () => {
   console.log(`Analytics escuchando en :${PORT} (TZ ${TZ})`);
   quoteGaps.start();                          // vigila la secuencia de cotizaciones
   camila.start();                             // espejo incremental de ejecuciones n8n
+  metricAlerts.start();                       // avisa a Alertas si el P90 o el % de Haiku se disparan
 });
