@@ -216,17 +216,24 @@ app.get('/api/stats', optionalAuth, wrap(async (req, res) => {
               max(created_at) FILTER (WHERE direction='out') AS last_sent_at,
               count(DISTINCT conversation_id) AS active_convs
        FROM messages WHERE created_at >= $1 AND created_at < $2`, [from, to]),
+    // Tiempo de respuesta separado por quién contesta: Camila y humanos. Juntos,
+    // las respuestas humanas (minutos u horas) inflaban el promedio de Camila.
     q(`WITH seq AS (
-         SELECT conversation_id, direction, created_at,
+         SELECT conversation_id, direction, created_at, sent_by,
                 LAG(direction)  OVER w AS pd,
                 LAG(created_at) OVER w AS pa
          FROM messages WHERE created_at >= $1 AND created_at < $2
-         WINDOW w AS (PARTITION BY conversation_id ORDER BY created_at))
-       SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY EXTRACT(EPOCH FROM (created_at - pa))) AS median_secs,
-              avg(EXTRACT(EPOCH FROM (created_at - pa))) AS avg_secs,
-              percentile_cont(0.9) WITHIN GROUP (ORDER BY EXTRACT(EPOCH FROM (created_at - pa))) AS p90_secs,
+         WINDOW w AS (PARTITION BY conversation_id ORDER BY created_at)),
+       resp AS (
+         SELECT CASE WHEN lower(sent_by) = 'camila' THEN 'camila' ELSE 'humano' END AS quien,
+                EXTRACT(EPOCH FROM (created_at - pa)) AS secs
+         FROM seq WHERE direction='out' AND pd='in' AND (created_at - pa) < interval '6 hours')
+       SELECT quien,
+              percentile_cont(0.5) WITHIN GROUP (ORDER BY secs) AS median_secs,
+              avg(secs) AS avg_secs,
+              percentile_cont(0.9) WITHIN GROUP (ORDER BY secs) AS p90_secs,
               count(*) AS n
-       FROM seq WHERE direction='out' AND pd='in' AND (created_at - pa) < interval '6 hours'`, [from, to]),
+       FROM resp GROUP BY quien`, [from, to]),
     q(`SELECT to_char(date_trunc('day', created_at AT TIME ZONE $3), 'YYYY-MM-DD') AS day,
               count(*) FILTER (WHERE direction='out') AS sent,
               count(*) FILTER (WHERE direction='in')  AS received
@@ -262,7 +269,15 @@ app.get('/api/stats', optionalAuth, wrap(async (req, res) => {
   ]);
 
   const k = kpi.rows[0] || {};
-  const r = rt.rows[0] || {};
+  const tiempos = quien => {
+    const r = rt.rows.find(x => x.quien === quien) || {};
+    return {
+      medianSecs: r.median_secs != null ? Number(r.median_secs) : null,
+      avgSecs: r.avg_secs != null ? Number(r.avg_secs) : null,
+      p90Secs: r.p90_secs != null ? Number(r.p90_secs) : null,
+      samples: Number(r.n) || 0
+    };
+  };
   const e = execT.rows[0] || {};
   const execByDay = execByDayRows.rows.map(x => ({
     day: x.day,
@@ -292,12 +307,8 @@ app.get('/api/stats', optionalAuth, wrap(async (req, res) => {
       lastSentAt: k.last_sent_at || null,
       activeConversations: Number(k.active_convs) || 0
     },
-    responseTime: {
-      medianSecs: r.median_secs != null ? Number(r.median_secs) : null,
-      avgSecs: r.avg_secs != null ? Number(r.avg_secs) : null,
-      p90Secs: r.p90_secs != null ? Number(r.p90_secs) : null,
-      samples: Number(r.n) || 0
-    },
+    responseTime: tiempos('camila'),        // solo Camila
+    responseTimeHuman: tiempos('humano'),   // respuestas de personas (u origen sin dato)
     execTime: {
       medianSecs: e.median_secs != null ? Number(e.median_secs) : null,
       avgSecs: e.avg_secs != null ? Number(e.avg_secs) : null,

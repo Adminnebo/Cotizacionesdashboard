@@ -87,6 +87,20 @@
       <div class="kpi__sub">${sub || ''}</div></div>`;
   }
 
+  // KPI con tres números del mismo peso (mediana, promedio, p90).
+  function kpiTrio(label, items, sub) {
+    return `<div class="kpi kpi--trio">
+      <div class="kpi__label">${label}</div>
+      <div class="kpi__trio">${items.map(([v, l]) => `<div><div class="kpi__value">${v}</div><div class="kpi__trio-label">${l}</div></div>`).join('')}</div>
+      <div class="kpi__sub">${sub || ''}</div></div>`;
+  }
+  function kpiTiempo(rt, rh) {
+    const h = rh && rh.samples ? `humanos: prom ${fmtSecs(rh.avgSecs)} · p90 ${fmtSecs(rh.p90Secs)}` : '';
+    return kpiTrio('Respuesta de Camila',
+      [[fmtSecs(rt.medianSecs), 'mediana'], [fmtSecs(rt.avgSecs), 'promedio'], [fmtSecs(rt.p90Secs), 'p90']],
+      `${fmtNum(rt.samples || 0)} respuestas` + (h ? ` · ${h}` : ''));
+  }
+
   function authHeaders() { return (window.Auth && Auth.currentToken) ? { Authorization: 'Bearer ' + Auth.currentToken } : {}; }
 
   async function setupAuth() {
@@ -156,7 +170,7 @@
         kpi('Mensajes', '', fmtNum(total), `${fmtNum(s.kpi.sent)} enviados · ${fmtNum(s.kpi.received)} recibidos`),
         kpi('Conversaciones', '', fmtNum(s.kpi.activeConversations), 'con actividad en el rango'),
         kpi('Cotizaciones', '', q.available ? fmtNum(q.count) : 'Pendiente', q.available ? (q.amount ? 'RD$ ' + fmtNum(Math.round(q.amount)) + ' cotizado' : 'enviadas en el rango') : 'configurar MSSQL', !q.available),
-        kpi('Tiempo de respuesta', '', fmtSecs(rt.medianSecs), `mediana · prom ${fmtSecs(rt.avgSecs)} · p90 ${fmtSecs(rt.p90Secs)}`),
+        kpiTiempo(rt, s.responseTimeHuman),
         kpi('Último enviado', '', fmtDateTime(s.kpi.lastSentAt), relTime(s.kpi.lastSentAt), false, 'kpi--sm')
       ];
       kpisEl.innerHTML = kpis.join('');
@@ -165,7 +179,7 @@
       const kpis = [
         kpi('Enviados', col.sent, fmtNum(s.kpi.sent), 'mensajes salientes'),
         kpi('Recibidos', col.received, fmtNum(s.kpi.received), 'mensajes entrantes'),
-        kpi('Tiempo de respuesta', '', fmtSecs(rt.medianSecs), `mediana · prom ${fmtSecs(rt.avgSecs)} · p90 ${fmtSecs(rt.p90Secs)}`)
+        kpiTiempo(rt, s.responseTimeHuman)
       ];
       if (canCost) {   // costes reales solo super_admin; si no, se ocultan (no aparecen)
         kpis.push(
