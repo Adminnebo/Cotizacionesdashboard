@@ -384,6 +384,8 @@ table.msgs { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 .viewer__actions { display: flex; align-items: center; gap: 8px; flex: none; }
 .viewer__actions .modal__close { position: static; }
 .viewer__frame { display: block; width: 100%; height: 80vh; border: 0; background: #fff; }
+.modal__box--pagos { max-width: 560px; }
+.pagos__frame { display: block; width: 100%; height: 620px; max-height: calc(100vh - 110px); border: 0; }
 
 /* tooltip */
 .tip {
