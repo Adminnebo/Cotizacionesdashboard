@@ -4,13 +4,14 @@
 
    Dos vigilancias, cada METRIC_ALERTS_MINUTES:
      · P90 de espera del cliente (entrante → respuesta de Camila, < 6 h):
-       el de las últimas 2 h ≥ ×2 el de los 7 días anteriores, en 3 revisiones
-       seguidas (45 min con el intervalo por defecto).
+       el de las últimas 2 h ≥ 5 min (umbral fijo, no relativo a la semana: si
+       el tiempo sube poco a poco, un umbral relativo nunca avisaría), en 3
+       revisiones seguidas (45 min con el intervalo por defecto).
      · % de respuestas con Haiku (respaldo de DeepSeek): el de la última hora
        ≥ ×2 el de los 7 días anteriores Y al menos +10 puntos, en 2 revisiones.
 
-   Las reglas salen de simular 30 días reales: con +10% sobre el P90 saltaba
-   1–3 veces al día; con estas, solo en caídas reales (p.ej. 14/09: 912 s vs 84 s).
+   La de Haiku sale de simular 30 días reales. El P90 normal ronda 40 s, así
+   que 5 min solo salta en caídas reales (p.ej. 14/09: 912 s).
 
    Se avisa UNA vez por episodio: vuelve a poder avisar cuando una revisión con
    datos suficientes sale normal. Además la app agrupa por errorType+node, así
@@ -31,7 +32,7 @@ const ALERTAS_KEY = process.env.ALERTAS_KEY || 'n8n-camila';
 const NODO = 'Métricas de Camila';
 
 const REGLAS = {
-  p90: { ventanaHoras: 2, minActual: 30, minBase: 100, factor: 2, seguidas: 3 },
+  p90: { ventanaHoras: 2, minActual: 30, maxSeg: 300, seguidas: 3 },
   haiku: { ventanaHoras: 1, minActual: 15, minBase: 100, factor: 2, puntos: 10, seguidas: 2 }
 };
 
@@ -84,8 +85,8 @@ function numero(v) { const n = v == null ? NaN : Number(v); return Number.isFini
 
 // ¿La lectura se sale de lo normal? null = no hay datos suficientes para juzgar.
 function juzgarP90(l, regla = REGLAS.p90) {
-  if (l.nActual < regla.minActual || l.nBase < regla.minBase || l.actual == null || !l.base) return null;
-  return l.actual >= l.base * regla.factor;
+  if (l.nActual < regla.minActual || l.actual == null) return null;
+  return l.actual >= regla.maxSeg;
 }
 function juzgarHaiku(l, regla = REGLAS.haiku) {
   if (l.nActual < regla.minActual || l.nBase < regla.minBase || l.actual == null || l.base == null) return null;
@@ -122,12 +123,11 @@ async function avisar(evento) {
 const fmt = n => (n == null ? '—' : Math.round(n * 10) / 10);
 
 function eventoP90(l) {
-  const x = l.actual / l.base;
   return {
     errorType: 'P90 de respuesta elevado',
     message: `El P90 de lo que tarda Camila en responder es ${fmt(l.actual)} s en las últimas ${REGLAS.p90.ventanaHoras} h ` +
-      `(×${fmt(x)} sobre lo normal: ${fmt(l.base)} s en 7 días). ${l.nActual} respuestas.`,
-    payload: { p90Seg: fmt(l.actual), normalSeg: fmt(l.base), veces: fmt(x), respuestas: l.nActual, ventanaHoras: REGLAS.p90.ventanaHoras }
+      `(límite: ${REGLAS.p90.maxSeg / 60} min; lo normal en 7 días: ${fmt(l.base)} s). ${l.nActual} respuestas.`,
+    payload: { p90Seg: fmt(l.actual), limiteSeg: REGLAS.p90.maxSeg, normalSeg: fmt(l.base), respuestas: l.nActual, ventanaHoras: REGLAS.p90.ventanaHoras }
   };
 }
 function eventoHaiku(l) {
