@@ -17,11 +17,16 @@
    datos suficientes sale normal. Además la app agrupa por errorType+node, así
    que un reintento con el incidente abierto solo suma al contador.
 
+   Además, en cada revisión publica el "Tiempo de respuesta" del panel (misma
+   consulta y rango por defecto: mediana, promedio y p90 de los últimos 30
+   días) en la pestaña Camila de Alertas, para que se vean los mismos números.
+
    Config:
      ALERTAS_TOKEN           INGEST_TOKEN de la app de Alertas (sin él solo registra)
      ALERTAS_URL             base de la app (def. https://alertas-app-production.up.railway.app)
      ALERTAS_KEY             sistema dado de alta en Alertas (def. n8n-camila)
      METRIC_ALERTS_MINUTES   cada cuánto revisar (def. 15)
+     ALERTAS_SALUD_KEY       tarjeta de la pestaña Camila (def. camila-texto)
    ========================================================= */
 'use strict';
 const { q } = require('./db');
@@ -30,6 +35,8 @@ const ALERTAS_URL = String(process.env.ALERTAS_URL || 'https://alertas-app-produ
 const ALERTAS_TOKEN = process.env.ALERTAS_TOKEN || '';
 const ALERTAS_KEY = process.env.ALERTAS_KEY || 'n8n-camila';
 const NODO = 'Métricas de Camila';
+const SALUD_KEY = process.env.ALERTAS_SALUD_KEY || 'camila-texto';
+const TIEMPO_DIAS = 30;   // el rango por defecto del panel: así los números coinciden
 
 const REGLAS = {
   p90: { ventanaHoras: 2, minActual: 30, maxSeg: 300, seguidas: 3 },
@@ -120,6 +127,55 @@ async function avisar(evento) {
   }
 }
 
+// El KPI "Tiempo de respuesta" del panel, calcado de /api/stats con el rango
+// por defecto (últimos 30 días). No se filtra por Camila a propósito: tiene que
+// dar lo mismo que se ve en el panel.
+async function leerTiempoRespuesta(dias = TIEMPO_DIAS) {
+  const r = await q(`
+    WITH seq AS (
+      SELECT conversation_id, direction, created_at,
+             LAG(direction)  OVER w AS pd,
+             LAG(created_at) OVER w AS pa
+      FROM messages WHERE created_at >= now() - make_interval(days => $1)
+      WINDOW w AS (PARTITION BY conversation_id ORDER BY created_at))
+    SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY EXTRACT(EPOCH FROM (created_at - pa))) AS median_secs,
+           avg(EXTRACT(EPOCH FROM (created_at - pa))) AS avg_secs,
+           percentile_cont(0.9) WITHIN GROUP (ORDER BY EXTRACT(EPOCH FROM (created_at - pa))) AS p90_secs,
+           count(*)::int AS n
+    FROM seq WHERE direction='out' AND pd='in' AND (created_at - pa) < interval '6 hours'`, [dias]);
+  const x = r.rows[0] || {};
+  return { medianSecs: numero(x.median_secs), avgSecs: numero(x.avg_secs), p90Secs: numero(x.p90_secs), n: Number(x.n) || 0 };
+}
+
+// Cuerpo de POST /api/salud/respuesta. null si no hay nada que enseñar.
+function cuerpoTiempo(t, ahora = new Date()) {
+  if (t.medianSecs == null && t.avgSecs == null && t.p90Secs == null) return null;
+  return {
+    key: SALUD_KEY,
+    measuredAt: ahora.toISOString(),
+    window: `últimos ${TIEMPO_DIAS} días`,
+    p50Sec: redondear(t.medianSecs),
+    avgSec: redondear(t.avgSecs),
+    p90Sec: redondear(t.p90Secs),
+    samples: t.n
+  };
+}
+const redondear = n => (n == null ? null : Math.round(n * 10) / 10);
+
+async function publicarTiempo() {
+  const cuerpo = cuerpoTiempo(await leerTiempoRespuesta());
+  if (!cuerpo || !ALERTAS_TOKEN) return cuerpo;
+  const res = await fetch(`${ALERTAS_URL}/api/salud/respuesta`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-api-token': ALERTAS_TOKEN },
+    body: JSON.stringify(cuerpo),
+    signal: AbortSignal.timeout(10000)
+  });
+  if (!res.ok) throw new Error(`Alertas respondió ${res.status} ${await res.text().catch(() => '')}`);
+  console.log(`[metric-alerts] tiempo de respuesta → Alertas: mediana ${cuerpo.p50Sec} s · prom ${cuerpo.avgSec} s · p90 ${cuerpo.p90Sec} s (n=${cuerpo.samples})`);
+  return cuerpo;
+}
+
 const fmt = n => (n == null ? '—' : Math.round(n * 10) / 10);
 
 function eventoP90(l) {
@@ -167,6 +223,8 @@ async function revisar() {
       console.error(`[metric-alerts] ${v.nombre}`, e.message);
     }
   }
+  // Aparte y al final: si Alertas o la consulta fallan, las vigilancias ya corrieron.
+  try { ultimas.tiempo = await publicarTiempo(); } catch (e) { console.error('[metric-alerts] tiempo', e.message); }
   return ultimas;
 }
 
@@ -184,4 +242,4 @@ function start() {
   console.log(`[metric-alerts] vigilando P90 y % Haiku cada ${mins} min` + (ALERTAS_TOKEN ? ` → Alertas (${ALERTAS_KEY})` : ' (sin ALERTAS_TOKEN: solo registra)'));
 }
 
-module.exports = { start, revisar, juzgarP90, juzgarHaiku, avanzar, eventoP90, eventoHaiku, leerP90, leerHaiku, REGLAS };
+module.exports = { start, revisar, leerTiempoRespuesta, cuerpoTiempo, publicarTiempo, juzgarP90, juzgarHaiku, avanzar, eventoP90, eventoHaiku, leerP90, leerHaiku, REGLAS };
