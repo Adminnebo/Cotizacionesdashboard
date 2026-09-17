@@ -9,6 +9,8 @@
   let msgPage = 1, msgData = null, msgSearch = '', msgSender = 'all', msgChannel = '';
   let logsPage = 1, logsData = null;
   let camilaData = null;
+  // Página de pago de lo que se debe (la muestra el botón 💳, solo con pagos.ver).
+  const PAGOS_URL = 'https://app.swordaisolutions.com/pay/d88e8d1ea5e5ff6ce37d500263adc1a75117da6b5e968bd9?embed=1';
   const ACTION_LABEL = { bot_off: '🔴 Apagó el bot', bot_on: '🟢 Encendió el bot', conv_close: '🔒 Cerró conversación', conv_open: '🔓 Abrió conversación', conv_delete: '🗑️ Eliminó conversación', no_reply: '⏰ Entrante sin respuesta' };
 
   // Conmutador entre las 3 plataformas (se rellena tras conocer el acceso del usuario).
@@ -871,6 +873,16 @@
         '_blank'
       );
     });
+    // Acceso directo a lo que se debe (solo con pagos.ver). El iframe se carga al
+    // abrir, así nadie más descarga la página de pago.
+    const cerrarPagos = () => { $('#pagosModal').hidden = true; };
+    $('#btnPagos').addEventListener('click', () => {
+      if ($('#pagosFrame').src === 'about:blank') $('#pagosFrame').src = PAGOS_URL;
+      $('#pagosModal').hidden = false;
+    });
+    $('#pagosClose').addEventListener('click', cerrarPagos);
+    $('#pagosModal').addEventListener('click', e => { if (e.target.id === 'pagosModal') cerrarPagos(); });
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') cerrarPagos(); });
     // Barra de fechas propia de la tarjeta de Camila (arrastre de extremos y del rango).
     $('#camilaH0').addEventListener('pointerdown', e => camStart('start', e));
     $('#camilaH1').addEventListener('pointerdown', e => camStart('end', e));

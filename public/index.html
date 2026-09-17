@@ -36,6 +36,7 @@
       <button class="icon-btn" id="btnRefresh" title="Actualizar">↻</button>
       <button class="icon-btn" id="btnTheme" title="Tema claro/oscuro">◐</button>
       <button class="seg" id="btnJarvis" title="Abrir Jarvis" data-perm="jarvis.usar">🧠 Jarvis</button>
+      <button class="seg" id="btnPagos" title="Lo que se debe" data-perm="pagos.ver" hidden>💳 Pagos</button>
       <a class="seg" id="btnUsers" href="/users.html" title="Gestionar usuarios" hidden>👥 Usuarios</a>
       <button class="seg" id="btnAuth" title="Sesión" hidden></button>
     </div>
@@ -411,6 +412,19 @@
         </div>
       </div>
       <iframe class="viewer__frame" id="pdfFrame" title="Vista previa PDF" src="about:blank"></iframe>
+    </div>
+  </div>
+
+  <!-- Popup: lo que se debe (solo con pagos.ver) -->
+  <div class="modal modal--viewer" id="pagosModal" hidden>
+    <div class="modal__box modal__box--viewer modal__box--pagos">
+      <div class="viewer__bar">
+        <span class="viewer__name">Lo que se debe</span>
+        <div class="viewer__actions">
+          <button class="modal__close" id="pagosClose" title="Cerrar">✕</button>
+        </div>
+      </div>
+      <iframe class="pagos__frame" id="pagosFrame" title="Pagar" src="about:blank"></iframe>
     </div>
   </div>
 
