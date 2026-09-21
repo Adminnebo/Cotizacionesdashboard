@@ -185,4 +185,31 @@ async function quoteNumbers(windowSize = 3000) {
   }
 }
 
-module.exports = { sql, getMssql, quotesStat, quotesList, quoteDetail, quoteNumbers };
+// Borra una cotización COMPLETA: primero las líneas/productos (dCotizacionesWebIA)
+// y luego la cabecera (iCotizacionesWebIA), en UNA transacción, unidas por nfactura.
+// Es IRREVERSIBLE. Si el usuario MSSQL no tiene permiso de DELETE, la transacción se
+// revierte y se lanza el error (no se borra nada). Devuelve conteos borrados.
+async function deleteQuote(nfactura) {
+  if (!process.env.MSSQL_SERVER) return { available: false };
+  const n = Number(nfactura);
+  if (!Number.isFinite(n)) return { available: true, notFound: true, deletedHeader: 0, deletedLines: 0 };
+  const p = await getMssql();
+  if (!p) return { available: false };
+  const tx = new sql.Transaction(p);
+  await tx.begin();
+  try {
+    const lines = await new sql.Request(tx).input('n', sql.Numeric(18, 0), n)
+      .query('DELETE FROM dCotizacionesWebIA WHERE nfactura=@n');
+    const head = await new sql.Request(tx).input('n', sql.Numeric(18, 0), n)
+      .query('DELETE FROM iCotizacionesWebIA WHERE nfactura=@n');
+    const deletedHeader = head.rowsAffected[0] || 0;
+    if (!deletedHeader) { await tx.rollback(); return { available: true, notFound: true, deletedHeader: 0, deletedLines: 0 }; }
+    await tx.commit();
+    return { available: true, deletedHeader, deletedLines: lines.rowsAffected[0] || 0 };
+  } catch (e) {
+    try { await tx.rollback(); } catch (_) {}
+    throw e;
+  }
+}
+
+module.exports = { sql, getMssql, quotesStat, quotesList, quoteDetail, quoteNumbers, deleteQuote };

@@ -379,6 +379,8 @@ table.msgs { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 .q__btn:hover { background: var(--surface-0); }
 .q__btn--dl { background: var(--sent); color: #fff; border-color: transparent; }
 .q__btn--dl:hover { filter: brightness(1.05); background: var(--sent); }
+.quo__del { margin-left: 6px; color: #dc2626; border-color: rgba(220,38,38,.4); }
+.quo__del:hover { background: #dc2626; color: #fff; border-color: transparent; }
 
 /* Popup interno de vista previa del PDF */
 .modal--viewer { z-index: 70; padding: 24px 16px; }

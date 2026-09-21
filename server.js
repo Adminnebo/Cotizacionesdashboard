@@ -7,7 +7,7 @@
 const path = require('path');
 const express = require('express');
 const { q } = require('./db');
-const { quotesStat } = require('./mssql');
+const { quotesStat, deleteQuote } = require('./mssql');
 const { rangeOf } = require('./range');
 const { configured: authCfg, optionalAuth, URL: SB_URL, ANON: SB_ANON } = require('./analyticsAuth');
 const { puede: puedePerm } = require('./permcatalog');
@@ -155,6 +155,22 @@ app.use('/api', camila);
 
 // Agentes y modelos: crear/editar/borrar. TODO detrás del gate y SOLO super_admin.
 const soloSuper = (req, res) => { if (esSuper(req)) return true; res.status(403).json({ error: 'Solo el super admin puede cambiar esto' }); return false; };
+
+// Borrar una cotización (cabecera + líneas de producto) de la base MSSQL del cliente.
+// SOLO super_admin. Es IRREVERSIBLE. Si la credencial MSSQL no tiene permiso de
+// DELETE, la transacción se revierte y no se borra nada (se devuelve el error).
+app.delete('/api/quotes/:n', wrap(async (req, res) => {
+  if (!soloSuper(req, res)) return;
+  const n = Number(req.params.n);
+  if (!Number.isFinite(n)) return res.status(400).json({ error: 'Número de cotización inválido' });
+  let r;
+  try { r = await deleteQuote(n); }
+  catch (e) { console.error('[quotes] delete', n, e.message); return res.status(500).json({ error: e.message, number: n }); }
+  if (!r.available) return res.status(503).json({ error: 'MSSQL no configurado' });
+  if (r.notFound) return res.status(404).json({ error: 'Cotización no encontrada', number: n });
+  console.log(`[quotes] super_admin borró la cotización ${n} (cabecera:${r.deletedHeader}, líneas:${r.deletedLines})`);
+  res.json({ ok: true, number: n, deletedHeader: r.deletedHeader, deletedLines: r.deletedLines });
+}));
 
 // Agente: crear (name) o renombrar (id, name).
 app.post('/api/porcentaje/agente', wrap(async (req, res) => {

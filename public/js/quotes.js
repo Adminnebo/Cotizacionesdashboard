@@ -128,7 +128,7 @@
         <td class="num dim">${fmtRD(x.itbis)}</td>
         <td class="num"><b>${fmtRD(x.total)}</b></td>
         <td class="nowrap">${x.sent ? '<span class="quo__sent">✔ Enviada</span>' : `<span class="dim cap">${esc(x.status || '—')}</span>`}</td>
-        <td class="nowrap">${x.pdfUrl ? `<button class="q__btn quo__pdf" data-url="${esc(x.pdfUrl)}" data-n="${x.number}">📄 Ver</button>` : '<span class="dim">—</span>'}</td>
+        <td class="nowrap">${x.pdfUrl ? `<button class="q__btn quo__pdf" data-url="${esc(x.pdfUrl)}" data-n="${x.number}">📄 Ver</button>` : '<span class="dim">—</span>'}${window.NEBO_ROLE === 'super_admin' ? ` <button class="q__btn quo__del" data-n="${x.number}" title="Borrar cotización">🗑 Borrar</button>` : ''}</td>
       </tr>`;
       return head + (isOpen ? detailRow(x.number) : '');
     }).join('');
@@ -186,10 +186,29 @@
     if (!$('#tabCotizaciones').hidden) load();
   }
 
+  // Borra una cotización (cabecera + líneas) de la base del cliente. Solo super_admin. Irreversible.
+  async function confirmDelete(n) {
+    if (window.NEBO_ROLE !== 'super_admin') return;
+    if (!window.confirm(`¿Borrar la cotización ${n}?\n\nSe elimina de la base del cliente (cabecera y líneas de producto). Esta acción NO se puede deshacer.`)) return;
+    try {
+      const res = await fetch('/api/quotes/' + n, { method: 'DELETE', headers: deps.authHeaders() });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok || !j.ok) { alert(`No se pudo borrar la cotización ${n}:\n${j.error || ('HTTP ' + res.status)}`); return; }
+      open.delete(n); details.delete(n);
+      load();                                   // recarga lista + totales del rango
+    } catch (e) { alert('Error al borrar: ' + e.message); }
+  }
+
   function init(ctx) {
     deps = ctx;
 
     $('#quotesBody').addEventListener('click', e => {
+      const del = e.target.closest('.quo__del');
+      if (del) {                                // borrar no despliega la fila
+        e.stopPropagation();
+        confirmDelete(Number(del.dataset.n));
+        return;
+      }
       const pdf = e.target.closest('.quo__pdf');
       if (pdf) {                                // el botón de PDF no despliega la fila
         e.stopPropagation();
