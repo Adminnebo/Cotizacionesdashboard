@@ -30,6 +30,9 @@
     .pill--super_admin { background: rgba(235,104,52,.2); color: #f0996b; }
     .pill--admin { background: rgba(53,116,224,.2); color: #7aa7f5; }
     .pill--agent { background: rgba(255,255,255,.08); color: #b7bcc7; }
+    .tag { font-size: 10.5px; font-weight: 700; padding: 2px 7px; border-radius: 6px; margin-left: 6px; }
+    .tag--panel { background: rgba(52,211,153,.15); color: #34d399; }
+    .tag--prev { background: rgba(255,255,255,.06); color: #8b8f9a; }
     .msg { font-size: 13px; min-height: 18px; margin-top: 10px; }
     .msg--err { color: #f87171; } .msg--ok { color: #34d399; }
     .row-actions { display: flex; gap: 8px; }
@@ -126,7 +129,7 @@
       usersList = users;
       $('#count').textContent = users.length;
       $('#tbody').innerHTML = users.map(u => `<tr data-id="${u.id}" style="${u.hidden ? 'opacity:.5' : ''}">
-        <td>${esc(u.email)}${u.hidden ? ' <span class="dim">(oculto)</span>' : ''}</td>
+        <td>${esc(u.email)}${u.fromPanel ? '<span class="tag tag--panel">panel</span>' : '<span class="tag tag--prev">previo</span>'}${u.hidden ? ' <span class="dim">(oculto)</span>' : ''}</td>
         <td>${esc(u.fullName || '—')}</td>
         <td><span class="pill pill--${u.role}">${roleLabel(u.role)}</span></td>
         <td class="dim">${fmt(u.lastSignInAt)}</td>

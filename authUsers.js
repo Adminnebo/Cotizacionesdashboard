@@ -28,7 +28,7 @@ async function escribirPerfil(method, id, obj) {
     return (await r.text().catch(() => '')) || ('HTTP ' + r.status);
   };
   let err = await intentar(obj);
-  for (const col of ['permissions', 'platforms']) {
+  for (const col of ['permissions', 'platforms', 'created_via', 'hidden']) {
     if (err && (col in obj) && err.includes(`'${col}'`)) { delete obj[col]; err = await intentar(obj); }
   }
   return err;
@@ -53,11 +53,9 @@ router.get('/me', async (req, res) => {
   res.json({ role: u?u.role:null, platforms: u?u.platforms:null, permissions: u?u.permissions:null });
 });
 
-// Lee profiles tolerando esquemas sin la columna 'hidden' (reintenta sin ella).
+// Lee profiles con todas sus columnas (tolera esquemas sin 'hidden'/'created_via').
 async function fetchProfiles() {
-  let r = await fetch(URL + '/rest/v1/profiles?select=id,role,full_name,platforms,permissions,hidden', { headers: svc() });
-  if (r.ok) return await r.json();
-  r = await fetch(URL + '/rest/v1/profiles?select=id,role,full_name,platforms,permissions', { headers: svc() });
+  const r = await fetch(URL + '/rest/v1/profiles?select=*', { headers: svc() });
   return r.ok ? await r.json() : [];
 }
 
@@ -75,7 +73,7 @@ router.get('/users', requireAdmin, async (req, res) => {
     .filter(u => pmap[u.id])                       // solo usuarios creados desde el panel (tienen perfil)
     .map(u => {
       const p = pmap[u.id];
-      return { id: u.id, email: u.email, createdAt: u.created_at, lastSignInAt: u.last_sign_in_at, role: p.role || 'agent', fullName: p.full_name || null, platforms: plataformasDe(p.role, p.platforms), permissions: permisosDe(p), hidden: !!p.hidden };
+      return { id: u.id, email: u.email, createdAt: u.created_at, lastSignInAt: u.last_sign_in_at, role: p.role || 'agent', fullName: p.full_name || null, platforms: plataformasDe(p.role, p.platforms), permissions: permisosDe(p), hidden: !!p.hidden, fromPanel: p.created_via === 'panel' };
     })
     .filter(u => verOcultos || !u.hidden);         // ocultar los marcados salvo que super_admin los pida
   res.json({ users, canHide: req.role === 'super_admin', includeHidden: verOcultos });
@@ -90,7 +88,7 @@ router.post('/users', requireAdmin, async (req, res) => {
   const cres = await fetch(URL + '/auth/v1/admin/users', { method: 'POST', headers: svc(), body: JSON.stringify({ email, password, email_confirm: true }) });
   const cj = await cres.json().catch(() => ({}));
   if (!cres.ok) return res.status(400).json({ error: cj.msg || cj.error_description || ('createUser ' + cres.status) });
-  const perfil = { id: cj.id, email, role, full_name: b.fullName || null };
+  const perfil = { id: cj.id, email, role, full_name: b.fullName || null, created_via: 'panel' };
   const perms = limpiarPermisos(b.permissions);
   if (perms) { perfil.permissions = perms; perfil.platforms = platsDePermisos(perms); }
   else { const pl = limpiarPlataformas(b.platforms); if (pl) perfil.platforms = pl; }
