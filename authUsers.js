@@ -53,18 +53,32 @@ router.get('/me', async (req, res) => {
   res.json({ role: u?u.role:null, platforms: u?u.platforms:null, permissions: u?u.permissions:null });
 });
 
-router.get('/users', requireAdmin, async (_req, res) => {
+// Lee profiles tolerando esquemas sin la columna 'hidden' (reintenta sin ella).
+async function fetchProfiles() {
+  let r = await fetch(URL + '/rest/v1/profiles?select=id,role,full_name,platforms,permissions,hidden', { headers: svc() });
+  if (r.ok) return await r.json();
+  r = await fetch(URL + '/rest/v1/profiles?select=id,role,full_name,platforms,permissions', { headers: svc() });
+  return r.ok ? await r.json() : [];
+}
+
+// Lista de usuarios. SOLO los creados desde este panel (los que tienen fila en
+// profiles). Los marcados como ocultos no aparecen, salvo que un super_admin pida
+// verlos con ?includeHidden=1.
+router.get('/users', requireAdmin, async (req, res) => {
+  const verOcultos = req.role === 'super_admin' && ['1', 'true'].includes(String(req.query.includeHidden || ''));
   const ures = await fetch(URL + '/auth/v1/admin/users?page=1&per_page=500', { headers: svc() });
   if (!ures.ok) return res.status(500).json({ error: 'listUsers ' + ures.status });
   const uj = await ures.json();
-  const pres = await fetch(URL + '/rest/v1/profiles?select=id,role,full_name,platforms,permissions', { headers: svc() });
-  const profs = pres.ok ? await pres.json() : [];
+  const profs = await fetchProfiles();
   const pmap = {}; profs.forEach(p => { pmap[p.id] = p; });
-  const users = (uj.users || []).map(u => {
-    const p = pmap[u.id] || {};
-    return { id: u.id, email: u.email, createdAt: u.created_at, lastSignInAt: u.last_sign_in_at, role: p.role || 'agent', fullName: p.full_name || null, platforms: plataformasDe(p.role, p.platforms), permissions: permisosDe(p) };
-  });
-  res.json({ users });
+  const users = (uj.users || [])
+    .filter(u => pmap[u.id])                       // solo usuarios creados desde el panel (tienen perfil)
+    .map(u => {
+      const p = pmap[u.id];
+      return { id: u.id, email: u.email, createdAt: u.created_at, lastSignInAt: u.last_sign_in_at, role: p.role || 'agent', fullName: p.full_name || null, platforms: plataformasDe(p.role, p.platforms), permissions: permisosDe(p), hidden: !!p.hidden };
+    })
+    .filter(u => verOcultos || !u.hidden);         // ocultar los marcados salvo que super_admin los pida
+  res.json({ users, canHide: req.role === 'super_admin', includeHidden: verOcultos });
 });
 
 router.post('/users', requireAdmin, async (req, res) => {
@@ -104,6 +118,22 @@ router.patch('/users/:id', requireAdmin, async (req, res) => {
     if (perr) return res.status(400).json({ error: perr });
   }
   res.json({ ok: true });
+});
+
+// Ocultar / mostrar un usuario del listado. SOLO super_admin. No borra nada: marca
+// profiles.hidden. Requiere la columna profiles.hidden (ver migración en el README).
+async function requireSuper(req, res, next) {
+  if (!configured) return res.status(503).json({ error: 'Auth no configurado' });
+  const role = await tokenRole(req);
+  if (role !== 'super_admin') return res.status(403).json({ error: 'Solo el super admin puede ocultar usuarios' });
+  req.role = role;
+  next();
+}
+router.patch('/users/:id/hidden', requireSuper, async (req, res) => {
+  const hidden = !!(req.body && req.body.hidden);
+  const perr = await escribirPerfil('PATCH', req.params.id, { hidden });
+  if (perr) return res.status(400).json({ error: 'No se pudo actualizar (¿falta la columna profiles.hidden?): ' + perr });
+  res.json({ ok: true, hidden });
 });
 
 router.delete('/users/:id', requireAdmin, async (req, res) => {
