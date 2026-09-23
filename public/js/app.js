@@ -22,19 +22,12 @@
     { key: 'marketing', label: 'Marketing', icon: '🎬', url: MARKETING_URL }
   ];
   // Marketing decide su propio acceso (solo super_admin o a quien ellos se lo den):
-  // se pregunta a su API con este mismo token y la pestaña sale solo si responde que sí.
-  let accesoMarketing = false, ultimoSwitcher = null;
-  function consultarMarketing() {
-    if (!window.Auth || !Auth.currentToken) return;
-    fetch(MARKETING_URL + '/api/acceso', { headers: { Authorization: 'Bearer ' + Auth.currentToken } })
-      .then(r => (r.ok ? r.json() : null))
-      .then(j => { accesoMarketing = !!(j && j.acceso); if (ultimoSwitcher) renderPlatSwitcher(...ultimoSwitcher); })
-      .catch(() => {});
-  }
+  // el acceso directo se ve siempre y quien no lo tenga ve alla un aviso claro (pedido 2026-09-23).
+  let ultimoSwitcher = null;
   function renderPlatSwitcher(current, allowed) {
     ultimoSwitcher = [current, allowed];
     const box = $('#platsw'); if (!box) return;
-    const puede = k => (k === 'marketing' ? accesoMarketing : !Array.isArray(allowed) || !allowed.length || allowed.includes(k));
+    const puede = k => (k === 'marketing' || !Array.isArray(allowed) || !allowed.length || allowed.includes(k));
     box.innerHTML = PLATS.filter(p => p.key === current || puede(p.key)).map(p => {
       const act = p.key === current;
       return act
@@ -135,7 +128,6 @@
         if (Array.isArray(plats) && plats.length && !plats.includes('cotizaciones')) return sinAcceso(plats);
         window.NEBO_ROLE = me.role || null;   // lo usa Ajustes para el bloque de Porcentaje
         renderPlatSwitcher('cotizaciones', plats);   // conmutador de plataformas
-        consultarMarketing();
         if (usersBtn && ['admin', 'super_admin'].includes(me.role)) usersBtn.hidden = false;
         // Permisos granulares: oculta las pestañas que el agente no tiene y, si la
         // activa quedó oculta, salta a la primera visible.
