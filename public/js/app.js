@@ -14,7 +14,7 @@
   const ACTION_LABEL = { bot_off: '🔴 Apagó el bot', bot_on: '🟢 Encendió el bot', conv_close: '🔒 Cerró conversación', conv_open: '🔓 Abrió conversación', conv_delete: '🗑️ Eliminó conversación', no_reply: '⏰ Entrante sin respuesta' };
 
   // Conmutador entre plataformas (se rellena tras conocer el acceso del usuario).
-  const MARKETING_URL = 'https://panel-production-f46d.up.railway.app';
+  const MARKETING_URL = 'https://panelmarketing.neboaiconsulting.com';
   const PLATS = [
     { key: 'inbox', label: 'Conversaciones', icon: '💬', url: 'https://whatsapp.neboaiconsulting.com' },
     { key: 'cotizaciones', label: 'Cotizaciones', icon: '📄', url: 'https://panelcotizaciones.neboaiconsulting.com' },
