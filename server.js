@@ -71,6 +71,10 @@ const TZ = process.env.TZ_DISPLAY || 'America/Santo_Domingo';
 const MSG_COST_OUT = Number(process.env.MSG_COST_OUT || 0);
 const MSG_COST_IN = Number(process.env.MSG_COST_IN || 0);
 const COST_CCY = process.env.MSG_COST_CURRENCY || 'USD';
+// Nombre del bot tal como lo guarda el inbox en messages.sent_by (su BOT_NAME).
+// Va interpolado en SQL, así que se limita a letras/números/espacio/guiones.
+const BOT_NAME = String(process.env.BOT_NAME || 'Camila').replace(/[^\p{L}\p{N} _-]/gu, '').trim() || 'Camila';
+const BOT_SQL = "'" + BOT_NAME.toLowerCase() + "'";
 
 const wrap = fn => (req, res) => Promise.resolve(fn(req, res)).catch(e => { console.error(req.path, e); res.status(500).json({ error: 'Error interno del servidor' }); });
 
@@ -80,7 +84,7 @@ const wrap = fn => (req, res) => Promise.resolve(fn(req, res)).catch(e => { cons
 // Supabase Storage. Consultas centralizadas en ./mssql.js; rutas en ./quotes.js.
 
 app.get('/api/health', (_req, res) => res.json({ ok: true }));
-app.get('/api/auth/config', (_req, res) => res.json({ supabaseUrl: SB_URL, supabaseAnonKey: SB_ANON, configured: authCfg }));
+app.get('/api/auth/config', (_req, res) => res.json({ supabaseUrl: SB_URL, supabaseAnonKey: SB_ANON, configured: authCfg, botName: BOT_NAME }));
 app.use('/api/auth', require('./authUsers')); // /api/auth/me, /users (solo admin/super_admin)
 
 // Proxy de grabaciones: va ABIERTO (antes del gate) porque el <audio> no puede
@@ -116,6 +120,7 @@ app.get('/api/porcentaje', wrap(async (req, res) => {
 // ── Gate de plataforma: todo lo demás exige acceso a 'cotizaciones' ──────────
 // Se eximen los webhooks de n8n (llevan su propia API key) y health.
 const { requirePlatform, requirePermission } = require('./analyticsAuth');
+const SOLO_SUPER_ADMIN = process.env.SOLO_SUPER_ADMIN === 'true';
 const ABIERTAS = [/^\/hooks\//, /^\/calls\/hook$/, /^\/health$/];
 
 // Mapa ruta → permiso granular (rutas relativas a /api). El primero que casa
@@ -140,6 +145,8 @@ const PERM_RUTAS = [
 app.use('/api', (req, res, next) => {
   if (ABIERTAS.some(re => re.test(req.path))) return next();
   requirePlatform('cotizaciones')(req, res, () => {
+    // Instalación interna (p.ej. panel de evaluación): solo entra super_admin.
+    if (SOLO_SUPER_ADMIN && authCfg && req.role !== 'super_admin') return res.status(403).json({ error: 'Solo super admin' });
     const hit = PERM_RUTAS.find(r => r.m === req.method && r.re.test(req.path));
     if (!hit) return next();
     requirePermission(hit.perm)(req, res, next);
@@ -241,7 +248,7 @@ app.get('/api/stats', optionalAuth, wrap(async (req, res) => {
          FROM messages WHERE created_at >= $1 AND created_at < $2
          WINDOW w AS (PARTITION BY conversation_id ORDER BY created_at)),
        resp AS (
-         SELECT CASE WHEN lower(sent_by) = 'camila' THEN 'camila' ELSE 'humano' END AS quien,
+         SELECT CASE WHEN lower(sent_by) = ${BOT_SQL} THEN 'camila' ELSE 'humano' END AS quien,
                 EXTRACT(EPOCH FROM (created_at - pa)) AS secs
          FROM seq WHERE direction='out' AND pd='in' AND (created_at - pa) < interval '6 hours')
        SELECT quien,
@@ -399,8 +406,8 @@ app.get('/api/mensajes-bot-humano', optionalAuth, wrap(async (req, res) => {
   const { from, to } = rangeOf(req);
   const rows = (await q(
     `SELECT to_char(date_trunc('day', created_at AT TIME ZONE $3), 'YYYY-MM-DD') AS d,
-            count(*) FILTER (WHERE lower(sent_by) = 'camila')                              AS bot,
-            count(*) FILTER (WHERE sent_by IS NOT NULL AND lower(sent_by) <> 'camila')     AS human,
+            count(*) FILTER (WHERE lower(sent_by) = ${BOT_SQL})                            AS bot,
+            count(*) FILTER (WHERE sent_by IS NOT NULL AND lower(sent_by) <> ${BOT_SQL})   AS human,
             count(*) FILTER (WHERE sent_by IS NULL)                                        AS sin_dato
      FROM messages
      WHERE created_at >= $1 AND created_at < $2 AND direction = 'out'
@@ -433,8 +440,8 @@ app.get('/api/messages', optionalAuth, wrap(async (req, res) => {
   }
   const sender = String(req.query.sender || 'all');   // all | bot (Camila) | human (usuarios)
   let senderClause = '';
-  if (sender === 'bot') senderClause = ` AND lower(s.sent_by) = 'camila'`;
-  else if (sender === 'human') senderClause = ` AND s.sent_by IS NOT NULL AND lower(s.sent_by) <> 'camila'`;
+  if (sender === 'bot') senderClause = ` AND lower(s.sent_by) = ${BOT_SQL}`;
+  else if (sender === 'human') senderClause = ` AND s.sent_by IS NOT NULL AND lower(s.sent_by) <> ${BOT_SQL}`;
 
   const CHANNELS = ['whatsapp', 'instagram', 'facebook', 'pagina_web'];
   const channel = String(req.query.channel || '').trim().toLowerCase();

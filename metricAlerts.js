@@ -36,6 +36,8 @@ const ALERTAS_TOKEN = process.env.ALERTAS_TOKEN || '';
 const ALERTAS_KEY = process.env.ALERTAS_KEY || 'n8n-camila';
 const NODO = 'Métricas de Camila';
 const SALUD_KEY = process.env.ALERTAS_SALUD_KEY || 'camila-texto';
+// Mismo criterio que server.js: el bot es quien el inbox guarda en sent_by.
+const BOT_SQL = "'" + (String(process.env.BOT_NAME || 'Camila').replace(/[^\p{L}\p{N} _-]/gu, '').trim() || 'Camila').toLowerCase() + "'";
 const TIEMPO_DIAS = 30;   // el rango por defecto del panel: así los números coinciden
 
 const REGLAS = {
@@ -59,7 +61,7 @@ async function leerP90(horas) {
       SELECT created_at, EXTRACT(EPOCH FROM (created_at - pa)) AS secs
       FROM seq
       WHERE direction = 'out' AND pd = 'in' AND (created_at - pa) < interval '6 hours'
-        AND lower(sent_by) = 'camila'
+        AND lower(sent_by) = ${BOT_SQL}
         AND created_at >= now() - make_interval(hours => $1) - interval '7 days')
     SELECT percentile_cont(0.9) WITHIN GROUP (ORDER BY secs) FILTER (WHERE created_at >= now() - make_interval(hours => $1)) AS actual,
            count(*) FILTER (WHERE created_at >= now() - make_interval(hours => $1))::int AS n_actual,
@@ -78,7 +80,7 @@ async function leerHaiku(horas) {
            count(*) FILTER (WHERE created_at <  now() - make_interval(hours => $1))::int AS n_base,
            count(*) FILTER (WHERE created_at <  now() - make_interval(hours => $1) AND model ILIKE '%haiku%')::int AS h_base
     FROM messages
-    WHERE direction = 'out' AND model IS NOT NULL AND lower(sent_by) = 'camila'
+    WHERE direction = 'out' AND model IS NOT NULL AND lower(sent_by) = ${BOT_SQL}
       AND created_at >= now() - make_interval(hours => $1) - interval '7 days'`, [horas]);
   const x = r.rows[0] || {};
   const pct = (h, n) => (n ? (100 * h) / n : null);

@@ -242,7 +242,7 @@
 
   function sentByCell(name) {
     if (!name) return '<span class="dim">—</span>';
-    const bot = String(name).trim().toLowerCase() === 'camila';
+    const bot = String(name).trim().toLowerCase() === (window.NEBO_BOT || 'camila');
     return `<span class="${bot ? 'dim' : 'msgs__human'}">${bot ? '🤖' : '👤'} ${escapeHtml(name)}</span>`;
   }
 

@@ -21,6 +21,7 @@
     ready = (async () => {
       const cfg = await fetch('/api/auth/config').then(r => r.json()).catch(() => ({ configured: false }));
       Auth.configured = !!cfg.configured;
+      global.NEBO_BOT = String(cfg.botName || 'Camila').trim().toLowerCase();   // quién es el bot en sent_by
       if (!cfg.configured) return null;   // sin Supabase: modo abierto (no bloquea)
       if (!global.supabase) await loadScript('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js');
       sb = global.supabase.createClient(cfg.supabaseUrl, cfg.supabaseAnonKey, {

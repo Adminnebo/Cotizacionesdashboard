@@ -35,7 +35,22 @@ const API_TOKEN = process.env.N8N_API_TOKEN || '';
 const CONFIGURED = !!(API_URL && API_TOKEN);
 
 // Los flujos de procesamiento (el WhatsApp trigger queda FUERA a propósito).
-const WORKFLOWS = [
+// Otra instalación (otro n8n) trae sus propios ids: CAMILA_WORKFLOWS es un JSON
+// [{ "id": "...", "name": "...", "folder": "WhatsApp" }, ...]. Sin la variable (o
+// si viene mal formada) se usan los de abajo.
+function workflowsDeEnv() {
+  const raw = process.env.CAMILA_WORKFLOWS;
+  if (!raw) return null;
+  try {
+    const list = JSON.parse(raw)
+      .filter(w => w && w.id)
+      .map(w => ({ id: String(w.id), name: String(w.name || w.id), folder: String(w.folder || 'WhatsApp') }));
+    if (list.length) return list;
+    console.error('[camila] CAMILA_WORKFLOWS vacía → se usan los flujos por defecto');
+  } catch (e) { console.error('[camila] CAMILA_WORKFLOWS no es JSON válido → se usan los flujos por defecto:', e.message); }
+  return null;
+}
+const WORKFLOWS = workflowsDeEnv() || [
   { id: 'l5VYme9yNIWnkni4', name: '2 - WhatsApp bot',                         folder: 'WhatsApp'  },
   { id: 'DfETlpQTmwhQmcLi', name: '2.1 - Procesar Input Camila',              folder: 'WhatsApp'  },
   { id: 'KGu9mfNmqoS3Ikpb', name: '2.2 generar_cotizacion',                  folder: 'WhatsApp'  },
