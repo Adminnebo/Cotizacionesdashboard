@@ -11,7 +11,7 @@
   let camilaData = null;
   // Página de pago de lo que se debe (la muestra el botón 💳, solo con pagos.ver).
   const PAGOS_URL = 'https://app.swordaisolutions.com/pay/d88e8d1ea5e5ff6ce37d500263adc1a75117da6b5e968bd9?embed=1';
-  const ACTION_LABEL = { bot_off: '🔴 Apagó el bot', bot_on: '🟢 Encendió el bot', conv_close: '🔒 Cerró conversación', conv_open: '🔓 Abrió conversación', conv_delete: '🗑️ Eliminó conversación', no_reply: '⏰ Entrante sin respuesta' };
+  const ACTION_LABEL = { bot_off: '🔴 Apagó el bot', bot_on: '🟢 Encendió el bot', conv_close: '🔒 Cerró conversación', conv_open: '🔓 Abrió conversación', conv_delete: '🗑️ Eliminó conversación', contact_rename: '✏️ Cambió el nombre', no_reply: '⏰ Entrante sin respuesta' };
 
   // Conmutador entre plataformas (se rellena tras conocer el acceso del usuario).
   const MARKETING_URL = 'https://panelmarketing.neboaiconsulting.com';
