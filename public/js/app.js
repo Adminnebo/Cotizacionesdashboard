@@ -966,6 +966,12 @@
         getToken: () => (window.Auth && Auth.currentToken) || null,
         app: 'cotizaciones'
       });
+      // Política de privacidad: pop-up bloqueante para los administradores que aún
+      // no la aceptaron (el registro vive en el inbox; aceptar en un panel vale para todos).
+      if (window.PrivacyWidget) PrivacyWidget.init({
+        getToken: () => (window.Auth && Auth.currentToken) || null,
+        app: 'cotizaciones'
+      });
       load(); loadMessages();
       if (window.Quotes) Quotes.refreshIfVisible();
       if (window.Calls) Calls.refreshIfVisible();
