@@ -419,6 +419,7 @@ app.get('/api/messages', optionalAuth, wrap(async (req, res) => {
   // Coste de IA por mensaje: SOLO super_admin. El coste FINAL (charged) va abierto.
   const canSeeCost = esSuper(req);
   const canSeeMargin = esSuper(req);   // % ganancia/pérdida: solo super_admin
+  const canSeeReal = esSuper(req);     // coste_real (lo manda n8n): solo super_admin
 
   const limit = Math.min(200, Math.max(10, Number(req.query.limit) || 50));
   const page = Math.max(1, Number(req.query.page) || 1);
@@ -452,14 +453,14 @@ app.get('/api/messages', optionalAuth, wrap(async (req, res) => {
 
   const [rows, countR, groupedR] = await Promise.all([
     q(`WITH seq AS (
-         SELECT id, conversation_id, direction, type, text, status, created_at, execution_ms, model, cost_usd, charged_usd, sent_by, channel,
+         SELECT id, conversation_id, direction, type, text, status, created_at, execution_ms, model, cost_usd, charged_usd, coste_real, sent_by, channel,
                 LAG(direction)  OVER w AS prev_dir,
                 LAG(text)       OVER w AS prev_text,
                 LAG(type)       OVER w AS prev_type,
                 LAG(created_at) OVER w AS prev_at
          FROM messages WHERE created_at >= $1 AND created_at < $2
          WINDOW w AS (PARTITION BY conversation_id ORDER BY created_at, id))
-       SELECT s.id, s.conversation_id, s.created_at AS out_at, s.status, s.execution_ms, s.model, s.cost_usd, s.charged_usd, s.sent_by, s.channel,
+       SELECT s.id, s.conversation_id, s.created_at AS out_at, s.status, s.execution_ms, s.model, s.cost_usd, s.charged_usd, s.coste_real, s.sent_by, s.channel,
               s.text AS out_text, s.type AS out_type,
               s.prev_text AS in_text, s.prev_type AS in_type, s.prev_at AS in_at,
               EXTRACT(EPOCH FROM (s.created_at - s.prev_at)) AS response_secs,
@@ -533,7 +534,7 @@ app.get('/api/messages', optionalAuth, wrap(async (req, res) => {
     };
   }
   res.json({
-    page, limit, total, canSeeCost, canSeeMargin, marginRecap,
+    page, limit, total, canSeeCost, canSeeMargin, canSeeReal, marginRecap,
     cost: { out: MSG_COST_OUT, in: MSG_COST_IN, currency: COST_CCY },
     items: rows.rows.map(m => {
       // Lo cobrado al cliente vs. lo que nos costó (IA). Ganancia = cobrado - coste.
@@ -563,6 +564,8 @@ app.get('/api/messages', optionalAuth, wrap(async (req, res) => {
         channel: m.channel || 'whatsapp',
         costUsd: (canSeeCost && m.cost_usd != null) ? Number(m.cost_usd) : null,
         cost: charged,
+        // Coste real que manda n8n: solo viaja para super_admin.
+        costeReal: canSeeReal ? (m.coste_real != null ? Number(m.coste_real) : null) : undefined,
         // Solo viaja para super_admin; para el resto el campo ni existe.
         marginPct: canSeeMargin ? marginPct : undefined
       };
