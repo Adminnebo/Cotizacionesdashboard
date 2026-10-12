@@ -451,7 +451,7 @@ app.get('/api/messages', optionalAuth, wrap(async (req, res) => {
   const paramsTot = params.slice();
   const outIdx = paramsTot.push(MSG_COST_OUT);
 
-  const [rows, countR, groupedR] = await Promise.all([
+  const [rows, countR, groupedR, realR] = await Promise.all([
     q(`WITH seq AS (
          SELECT id, conversation_id, direction, type, text, status, created_at, execution_ms, model, cost_usd, charged_usd, coste_real, sent_by, channel,
                 LAG(direction)  OVER w AS prev_dir,
@@ -495,7 +495,21 @@ app.get('/api/messages', optionalAuth, wrap(async (req, res) => {
        JOIN conversations cv ON cv.id = s.conversation_id
        JOIN contacts c ON c.id = cv.contact_id
        WHERE s.direction='out' AND s.prev_dir='in' AND s.cost_usd > 0${searchClause}${senderClause}${channelClause}
-       GROUP BY s.sent_by, s.model`, paramsTot)
+       GROUP BY s.sent_by, s.model`, paramsTot),
+    // Respuestas con coste_real (lo manda n8n) para el recap real del super_admin.
+    // Fila a fila, para calcular el cobrado de cada una igual que en la tabla.
+    canSeeReal
+      ? q(`WITH seq AS (
+         SELECT conversation_id, direction, text, channel, sent_by, model, cost_usd, charged_usd, coste_real,
+                LAG(direction) OVER w AS prev_dir, LAG(text) OVER w AS prev_text
+         FROM messages WHERE created_at >= $1 AND created_at < $2
+         WINDOW w AS (PARTITION BY conversation_id ORDER BY created_at, id))
+       SELECT s.sent_by, s.model, s.cost_usd, s.charged_usd, s.coste_real
+       FROM seq s
+       JOIN conversations cv ON cv.id = s.conversation_id
+       JOIN contacts c ON c.id = cv.contact_id
+       WHERE s.direction='out' AND s.prev_dir='in' AND s.coste_real IS NOT NULL${searchClause}${senderClause}${channelClause}`, params)
+      : Promise.resolve({ rows: [] })
   ]);
 
   // Config por modelo (Ajustes): % y coste. Blindado — si el sistema de config
@@ -533,8 +547,23 @@ app.get('/api/messages', optionalAuth, wrap(async (req, res) => {
       profitPct: sumCost > 0 ? ((sumCharged - sumCost) / sumCost) * 100 : null
     };
   }
+  // Recap REAL (solo super_admin): suma de coste_real y el margen contra lo cobrado
+  // de ESAS MISMAS respuestas. Solo cuentan las que traen coste_real; compararlo con
+  // el cobrado de todo el rango inflaría la ganancia mientras n8n no lo mande siempre.
+  let realRecap;
+  if (canSeeReal) {
+    let real = 0, charged = 0;
+    for (const m of realR.rows) { real += Number(m.coste_real) || 0; charged += cobradoDe(m); }
+    realRecap = {
+      count: realR.rows.length,
+      cost: real,
+      charged,
+      profit: charged - real,
+      profitPct: real > 0 ? ((charged - real) / real) * 100 : null
+    };
+  }
   res.json({
-    page, limit, total, canSeeCost, canSeeMargin, canSeeReal, marginRecap,
+    page, limit, total, canSeeCost, canSeeMargin, canSeeReal, marginRecap, realRecap,
     cost: { out: MSG_COST_OUT, in: MSG_COST_IN, currency: COST_CCY },
     items: rows.rows.map(m => {
       // Lo cobrado al cliente vs. lo que nos costó (IA). Ganancia = cobrado - coste.

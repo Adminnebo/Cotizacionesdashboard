@@ -272,6 +272,23 @@
       <span class="msgs-recap__item"><b>Cobrado total</b> ${fmtCost(r.charged, ccy)}</span>
       <span class="msgs-recap__item msgs-recap__net ${cls}">
         <b>${gana ? 'Ganancia' : 'Pérdida'} del rango</b> ${fmtCost(r.profit, ccy)} <span class="msgs-recap__pct ${cls}">(${pct})</span>
+      </span>${realRecapHtml(d.realRecap, ccy)}`;
+  }
+
+  // Segunda línea del recap: coste_real (lo manda n8n) contra lo cobrado de esas
+  // mismas respuestas. Solo super_admin (el servidor no lo manda a nadie más).
+  function realRecapHtml(rr, ccy) {
+    if (!rr) return '';
+    const head = '<span class="msgs-recap__break"></span>';
+    if (!rr.count) return head + '<span class="msgs-recap__item"><b>Coste real</b> <span class="dim">sin datos en el rango</span></span>';
+    const gana = (Number(rr.profit) || 0) >= 0;
+    const cls = gana ? 'msgs__gain' : 'msgs__loss';
+    const pct = rr.profitPct == null ? '—' : (rr.profitPct > 0 ? '+' : '') + Number(rr.profitPct).toFixed(0) + '%';
+    return head + `
+      <span class="msgs-recap__item"><b>Coste real total</b> ${fmtUsd(rr.cost)} <span class="dim">(${fmtNum(rr.count)} resp.)</span></span>
+      <span class="msgs-recap__item"><b>Cobrado de esas resp.</b> ${fmtCost(rr.charged, ccy)}</span>
+      <span class="msgs-recap__item msgs-recap__net ${cls}">
+        <b>${gana ? 'Ganancia' : 'Pérdida'} real</b> ${fmtCost(rr.profit, ccy)} <span class="msgs-recap__pct ${cls}">(${pct})</span>
       </span>`;
   }
 
