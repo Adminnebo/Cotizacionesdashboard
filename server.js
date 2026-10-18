@@ -523,8 +523,9 @@ app.get('/api/messages', optionalAuth, wrap(async (req, res) => {
   // coste configurado del modelo, y por último la tarifa por defecto.
   const cobradoDe = m => {
     const cfg = cfgDe(m);
-    if (m.cost_usd != null && cfg && cfg.percent != null) return Number(m.cost_usd) * (1 + Number(cfg.percent) / 100);
+    // Lo guardado es lo que se le cobró al cliente (lo manda n8n, igual que a la app): manda.
     if (m.charged_usd != null) return Number(m.charged_usd);
+    if (m.cost_usd != null && cfg && cfg.percent != null) return Number(m.cost_usd) * (1 + Number(cfg.percent) / 100);
     return (cfg && cfg.coste != null) ? Number(cfg.coste) : MSG_COST_OUT;
   };
 
@@ -536,9 +537,9 @@ app.get('/api/messages', optionalAuth, wrap(async (req, res) => {
     let sumCost = 0, sumCharged = 0;
     for (const g of groupedR.rows) {
       const c = Number(g.c) || 0;
-      const cfg = modelos.byPair[slugDe(g.sent_by) + '|' + slugDe(g.model)] || modelos.byModel[slugDe(g.model)] || null;
       sumCost += c;
-      sumCharged += (cfg && cfg.percent != null) ? c * (1 + Number(cfg.percent) / 100) : (Number(g.ch) || 0);
+      // Cobrado = lo guardado (lo que se le cobró al cliente), no el % recalculado.
+      sumCharged += Number(g.ch) || 0;
     }
     marginRecap = {
       cost: sumCost,
